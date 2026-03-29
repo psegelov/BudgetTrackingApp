@@ -3,29 +3,31 @@ import { supabase } from '../lib/supabase'
 
 export function useHousehold(session) {
   const [household, setHousehold] = useState(undefined)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    if (!session) return
+    if (!session?.user?.id) return
+
+    setLoading(true)
 
     const fetchHousehold = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('household_members')
         .select('household_id, households(id, name, currency)')
         .eq('user_id', session.user.id)
-        .single()
+        .maybeSingle()
 
-      if (error || !data) {
-        setHousehold(null)
-      } else {
+      if (data?.households) {
         setHousehold(data.households)
+      } else {
+        setHousehold(null)
       }
 
       setLoading(false)
     }
 
     fetchHousehold()
-  }, [session])
+  }, [session?.user?.id])
 
   return { household, loading }
 }

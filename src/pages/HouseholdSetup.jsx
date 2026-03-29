@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 
-function HouseholdSetup({ session }) {
+function HouseholdSetup({ session, setHousehold }) {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [confirming, setConfirming] = useState(false)
@@ -47,6 +47,7 @@ function HouseholdSetup({ session }) {
       return
     }
 
+    setHousehold(household)
     navigate('/dashboard')
   }
 
