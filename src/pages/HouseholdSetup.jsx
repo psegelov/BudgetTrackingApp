@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom'
 function HouseholdSetup({ session, setHousehold }) {
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [currency, setCurrency] = useState('ILS')
   const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -21,7 +22,7 @@ function HouseholdSetup({ session, setHousehold }) {
 
     const { data: household, error: householdError } = await supabase
       .from('households')
-      .insert({ name, created_by: session.user.id })
+      .insert({ name, currency, created_by: session.user.id })
       .select()
       .single()
 
@@ -55,7 +56,6 @@ function HouseholdSetup({ session, setHousehold }) {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">🏠</div>
           <h1 className="text-2xl font-bold text-gray-800">Set up your household</h1>
@@ -66,7 +66,7 @@ function HouseholdSetup({ session, setHousehold }) {
           {!confirming ? (
             <>
               <h2 className="text-lg font-semibold text-gray-700 mb-5">
-                Name your household
+                Household details
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
@@ -82,6 +82,22 @@ function HouseholdSetup({ session, setHousehold }) {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Default currency
+                  </label>
+                  <select
+                    value={currency}
+                    onChange={(e) => setCurrency(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="ILS">₪ ILS — Israeli Shekel</option>
+                    <option value="USD">$ USD — US Dollar</option>
+                    <option value="EUR">€ EUR — Euro</option>
+                  </select>
+                </div>
+
                 <button
                   type="submit"
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition"
@@ -95,9 +111,11 @@ function HouseholdSetup({ session, setHousehold }) {
               <h2 className="text-lg font-semibold text-gray-700 mb-2">
                 Confirm household
               </h2>
+              <p className="text-sm text-gray-500 mb-1">
+                Name: <span className="font-semibold text-gray-800">"{name}"</span>
+              </p>
               <p className="text-sm text-gray-500 mb-5">
-                You're about to create a household called{' '}
-                <span className="font-semibold text-gray-800">"{name}"</span>.
+                Default currency: <span className="font-semibold text-gray-800">{currency}</span>
               </p>
 
               {error && (

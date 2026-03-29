@@ -7,10 +7,12 @@ import HouseholdSetup from './pages/HouseholdSetup'
 import AddTransaction from './pages/AddTransaction'
 import EditTransaction from './pages/EditTransaction'
 import Layout from './components/Layout'
+import ProfileSetup from './pages/ProfileSetup'
 
 function App() {
   const [session, setSession] = useState(undefined)
   const [household, setHousehold] = useState(undefined)
+  const [profile, setProfile] = useState(undefined)
 
 useEffect(() => {
   const initDone = { current: false }
@@ -20,16 +22,25 @@ useEffect(() => {
     setSession(session ?? null)
 
     if (session?.user?.id) {
-      const { data } = await supabase
+      const { data: memberData } = await supabase
         .from('household_members')
         .select('household_id, households(id, name, currency)')
         .eq('user_id', session.user.id)
         .maybeSingle()
-      setHousehold(data?.households ?? null)
+
+      setHousehold(memberData?.households ?? null)
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', session.user.id)
+        .single()
+
+      setProfile(profileData ?? null)
     } else {
       setHousehold(null)
+      setProfile(null)
     }
-    initDone.current = true
   }
 
   init()
@@ -54,7 +65,7 @@ useEffect(() => {
   return () => subscription.unsubscribe()
 }, [])
 
-  if (session === undefined || household === undefined) return null
+if (session === undefined || household === undefined || profile === undefined) return null
 
   return (
     <Routes>
@@ -66,8 +77,16 @@ useEffect(() => {
         path="/setup"
         element={
           !session ? <Navigate to="/login" /> :
+          !profile?.full_name ? <Navigate to="/profile-setup" /> :
           household ? <Navigate to="/dashboard" /> :
           <HouseholdSetup session={session} setHousehold={setHousehold} />
+        }
+      />
+      <Route
+        path="/profile-setup"
+        element={
+          !session ? <Navigate to="/login" /> :
+          <ProfileSetup session={session} setProfile={setProfile} />
         }
       />
       <Route
@@ -100,11 +119,12 @@ useEffect(() => {
           </Layout>
         }
       />
-    <Route path="*" element={
-      !session ? <Navigate to="/login" /> :
-      !household ? <Navigate to="/setup" /> :
-      <Navigate to="/dashboard" />
-    } />    
+      <Route path="*" element={
+        !session ? <Navigate to="/login" /> :
+        !profile?.full_name ? <Navigate to="/profile-setup" /> :
+        !household ? <Navigate to="/setup" /> :
+        <Navigate to="/dashboard" />
+      } />   
     </Routes>
   )
 }
