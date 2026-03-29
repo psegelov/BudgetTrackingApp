@@ -5,35 +5,33 @@ import { useNavigate } from 'react-router-dom'
 function HouseholdSetup({ session }) {
   const navigate = useNavigate()
   const [name, setName] = useState('')
+  const [confirming, setConfirming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const handleCreate = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault()
+    if (!name.trim()) return
+    setConfirming(true)
+  }
+
+  const handleConfirm = async () => {
     setLoading(true)
     setError(null)
 
-    // Debug — check session
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log('session:', session)
-
-    // Create the household
     const { data: household, error: householdError } = await supabase
       .from('households')
       .insert({ name, created_by: session.user.id })
       .select()
       .single()
 
-    console.log('household result:', household, householdError)
-
-
     if (householdError) {
       setError(householdError.message)
       setLoading(false)
+      setConfirming(false)
       return
     }
 
-    // Add the user as owner
     const { error: memberError } = await supabase
       .from('household_members')
       .insert({
@@ -45,28 +43,43 @@ function HouseholdSetup({ session }) {
     if (memberError) {
       setError(memberError.message)
       setLoading(false)
+      setConfirming(false)
       return
     }
 
     navigate('/dashboard')
   }
 
+  if (confirming) {
+    return (
+      <div>
+        <h1>Are you sure?</h1>
+        <p>You are about to create a household called <strong>"{name}"</strong>.</p>
+        {error && <p style={{ color: 'red' }}>{error}</p>}
+        <button onClick={handleConfirm} disabled={loading}>
+          {loading ? 'Creating...' : 'Yes, create it'}
+        </button>
+        <button onClick={() => setConfirming(false)} disabled={loading}>
+          Go back
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div>
       <h1>Create your household</h1>
       <p>Give your household a name to get started.</p>
-      <form onSubmit={handleCreate}>
+      <form onSubmit={handleSubmit}>
         <input
           type="text"
-          placeholder="e.g. Cohen Family"
+          placeholder="e.g. Segelov Family"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
         />
         {error && <p style={{ color: 'red' }}>{error}</p>}
-        <button type="submit" disabled={loading}>
-          {loading ? 'Creating...' : 'Create Household'}
-        </button>
+        <button type="submit">Continue</button>
       </form>
     </div>
   )
