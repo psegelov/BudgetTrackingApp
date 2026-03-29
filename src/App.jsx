@@ -10,6 +10,7 @@ import Layout from './components/Layout'
 import ProfileSetup from './pages/ProfileSetup'
 import Settings from './pages/Settings'
 import JoinHousehold from './pages/JoinHousehold'
+import Categories from './pages/Categories'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -134,6 +135,16 @@ if (session === undefined || household === undefined || profile === undefined) r
               profile={profile}
               setProfile={setProfile}
             />
+          </Layout>
+        }
+      />
+      <Route
+        path="/categories"
+        element={
+          !session ? <Navigate to="/login" /> :
+          !household ? <Navigate to="/setup" /> :
+          <Layout household={household} setHousehold={setHousehold}>
+            <Categories household={household} />
           </Layout>
         }
       />
