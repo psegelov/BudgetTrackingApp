@@ -10,7 +10,7 @@ const navItems = [
   { path: '/budgets', label: 'Budgets', icon: '🎯' },
 ]
 
-function Layout({ children, household }) {
+function Layout({ children, household, setHousehold }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 

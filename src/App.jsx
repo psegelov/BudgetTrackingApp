@@ -8,6 +8,7 @@ import AddTransaction from './pages/AddTransaction'
 import EditTransaction from './pages/EditTransaction'
 import Layout from './components/Layout'
 import ProfileSetup from './pages/ProfileSetup'
+import Settings from './pages/Settings'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -116,6 +117,16 @@ if (session === undefined || household === undefined || profile === undefined) r
           !household ? <Navigate to="/setup" /> :
           <Layout household={household}>
             <EditTransaction session={session} household={household} />
+          </Layout>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          !session ? <Navigate to="/login" /> :
+          !household ? <Navigate to="/setup" /> :
+          <Layout household={household} setHousehold={setHousehold}>
+            <Settings session={session} household={household} setHousehold={setHousehold} />
           </Layout>
         }
       />
