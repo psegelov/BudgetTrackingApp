@@ -1,38 +1,132 @@
-import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+
+const navItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: '📊' },
+  { path: '/add', label: 'Add Transaction', icon: '➕' },
+  { path: '/categories', label: 'Categories', icon: '🏷️' },
+  { path: '/recurring', label: 'Recurring', icon: '🔄' },
+  { path: '/budgets', label: 'Budgets', icon: '🎯' },
+]
 
 function Layout({ children, household }) {
   const navigate = useNavigate()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     navigate('/login')
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navbar */}
-      <nav className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold text-blue-600">💰</span>
-            <span className="font-semibold text-gray-800">
-              {household?.name || 'Budget App'}
-            </span>
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <span className="text-2xl">💰</span>
+          <div>
+            <p className="font-bold text-gray-800 text-sm leading-tight">Budget App</p>
+            <p className="text-xs text-gray-400 truncate max-w-[140px]">{household?.name}</p>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="text-sm text-gray-500 hover:text-gray-800 transition"
-          >
-            Sign out
-          </button>
         </div>
+      </div>
+
+      {/* Nav items */}
+      <nav className="flex-1 px-3 py-4 space-y-1">
+        {navItems.map(item => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+                isActive
+                  ? 'bg-blue-50 text-blue-600'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+              }`
+            }
+          >
+            <span className="text-lg">{item.icon}</span>
+            {item.label}
+          </NavLink>
+        ))}
       </nav>
 
-      {/* Page content */}
-      <main className="max-w-4xl mx-auto px-4 py-6">
-        {children}
-      </main>
+      {/* Bottom — settings + signout */}
+      <div className="px-3 py-4 border-t border-gray-100 space-y-1">
+        <NavLink
+          to="/settings"
+          onClick={() => setSidebarOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
+              isActive
+                ? 'bg-blue-50 text-blue-600'
+                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+            }`
+          }
+        >
+          <span className="text-lg">⚙️</span>
+          Settings
+        </NavLink>
+        <button
+          onClick={handleSignOut}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-800 transition"
+        >
+          <span className="text-lg">🚪</span>
+          Sign out
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex flex-col w-56 bg-white border-r border-gray-100 fixed h-full z-10">
+        <SidebarContent />
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile sidebar */}
+      <aside className={`fixed top-0 left-0 h-full w-56 bg-white border-r border-gray-100 z-30 transform transition-transform md:hidden ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
+        <SidebarContent />
+      </aside>
+
+      {/* Main content */}
+      <div className="flex-1 md:ml-56">
+
+        {/* Mobile topbar */}
+        <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-gray-600 hover:text-gray-800 transition"
+          >
+            ☰
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-lg">💰</span>
+            <span className="font-semibold text-gray-800 text-sm">{household?.name}</span>
+          </div>
+          <div className="w-6" />
+        </div>
+
+        {/* Page content */}
+        <main className="max-w-4xl mx-auto px-4 py-6">
+          {children}
+        </main>
+      </div>
+
     </div>
   )
 }
