@@ -9,6 +9,7 @@ function Login() {
   const [isSignUp, setIsSignUp] = useState(false)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [signUpSuccess, setSignUpSuccess] = useState(false)
 
     const handleSubmit = async (e) => {
     e.preventDefault()
@@ -29,9 +30,36 @@ function Login() {
         return
     }
 
+    if (isSignUp) {
+        setSignUpSuccess(true)
+        setLoading(false)
+        return
+        }
+
     // Force a page reload — simplest way to re-run init() with the new session
     window.location.href = '/dashboard'
     }
+
+    if (signUpSuccess) {
+        return (
+            <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+            <div className="w-full max-w-sm text-center">
+                <div className="text-5xl mb-4">📧</div>
+                <h1 className="text-2xl font-bold text-gray-800 mb-2">Check your email</h1>
+                <p className="text-sm text-gray-400 mb-6">
+                We sent a confirmation link to <span className="font-medium text-gray-600">{email}</span>. 
+                Click it to activate your account.
+                </p>
+                <button
+                onClick={() => setSignUpSuccess(false)}
+                className="text-sm text-blue-600 hover:underline"
+                >
+                Back to login
+                </button>
+            </div>
+            </div>
+        )
+        }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
