@@ -6,40 +6,53 @@ import Dashboard from './pages/Dashboard'
 import HouseholdSetup from './pages/HouseholdSetup'
 import AddTransaction from './pages/AddTransaction'
 import EditTransaction from './pages/EditTransaction'
+import Layout from './components/Layout'
 
 function App() {
   const [session, setSession] = useState(undefined)
   const [household, setHousehold] = useState(undefined)
 
-  useEffect(() => {
-    const init = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setSession(session ?? null)
+useEffect(() => {
+  const initDone = { current: false }
 
-      if (session?.user?.id) {
-        const { data } = await supabase
-          .from('household_members')
-          .select('household_id, households(id, name, currency)')
-          .eq('user_id', session.user.id)
-          .maybeSingle()
+  const init = async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    setSession(session ?? null)
 
-        setHousehold(data?.households ?? null)
-      } else {
-        setHousehold(null)
-      }
+    if (session?.user?.id) {
+      const { data } = await supabase
+        .from('household_members')
+        .select('household_id, households(id, name, currency)')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+      setHousehold(data?.households ?? null)
+    } else {
+      setHousehold(null)
     }
+    initDone.current = true
+  }
 
-    init()
+  init()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setSession(null)
-        setHousehold(null)
-      }
-    })
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_OUT') {
+      setSession(null)
+      setHousehold(null)
+      initDone.current = false
+    } else if (event === 'SIGNED_IN' && initDone.current) {
+      // Only handle SIGNED_IN after init — this means it's a fresh login not a page load
+      setSession(session)
+      const { data } = await supabase
+        .from('household_members')
+        .select('household_id, households(id, name, currency)')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+      setHousehold(data?.households ?? null)
+    }
+  })
 
-    return () => subscription.unsubscribe()
-  }, [])
+  return () => subscription.unsubscribe()
+}, [])
 
   if (session === undefined || household === undefined) return null
 
@@ -62,7 +75,9 @@ function App() {
         element={
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
-          <Dashboard household={household} />
+          <Layout household={household}>
+            <Dashboard household={household} />
+          </Layout>
         }
       />
       <Route
@@ -70,7 +85,9 @@ function App() {
         element={
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
-          <AddTransaction session={session} household={household} />
+          <Layout household={household}>
+            <AddTransaction session={session} household={household} />
+          </Layout>
         }
       />
       <Route
@@ -78,7 +95,9 @@ function App() {
         element={
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
-          <EditTransaction session={session} household={household} />
+          <Layout household={household}>
+            <EditTransaction session={session} household={household} />
+          </Layout>
         }
       />
     <Route path="*" element={

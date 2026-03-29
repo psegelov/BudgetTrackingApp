@@ -14,7 +14,6 @@ function EditTransaction({ session, household }) {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Fetch transaction
       const { data: transaction, error: txError } = await supabase
         .from('transactions')
         .select('*')
@@ -27,7 +26,6 @@ function EditTransaction({ session, household }) {
         return
       }
 
-      // Fetch categories
       const { data: cats } = await supabase
         .from('categories')
         .select('id, name, type, parent_id, icon')
@@ -130,113 +128,153 @@ function EditTransaction({ session, household }) {
   const parentCategories = filteredCategories.filter(c => !c.parent_id)
   const subCategories = filteredCategories.filter(c => c.parent_id)
 
-  if (loading) return <p>Loading...</p>
+  if (loading) return (
+    <div className="flex items-center justify-center py-20 text-gray-400">
+      Loading...
+    </div>
+  )
 
   return (
-    <div>
-      <h1>Edit Transaction</h1>
-      <form onSubmit={handleSave}>
-
-        {/* Type toggle */}
-        <div>
-          <button
-            type="button"
-            onClick={() => handleChange('type', 'expense')}
-            style={{ fontWeight: form.type === 'expense' ? 'bold' : 'normal' }}
-          >
-            Expense
-          </button>
-          <button
-            type="button"
-            onClick={() => handleChange('type', 'income')}
-            style={{ fontWeight: form.type === 'income' ? 'bold' : 'normal' }}
-          >
-            Income
-          </button>
-        </div>
-
-        {/* Amount + currency */}
-        <div>
-          <input
-            type="number"
-            placeholder="0.00"
-            min="0"
-            step="0.01"
-            value={form.amount}
-            onChange={(e) => handleChange('amount', e.target.value)}
-            required
-          />
-          <select
-            value={form.currency}
-            onChange={(e) => handleChange('currency', e.target.value)}
-          >
-            <option value="ILS">₪ ILS</option>
-            <option value="USD">$ USD</option>
-            <option value="EUR">€ EUR</option>
-          </select>
-        </div>
-
-        {/* Category */}
-        <div>
-          <select
-            value={form.category_id}
-            onChange={(e) => handleChange('category_id', e.target.value)}
-          >
-            <option value="">Select category</option>
-            {parentCategories.map(parent => (
-              <optgroup key={parent.id} label={`${parent.icon || ''} ${parent.name}`}>
-                <option value={parent.id}>{parent.icon || ''} {parent.name}</option>
-                {subCategories
-                  .filter(sub => sub.parent_id === parent.id)
-                  .map(sub => (
-                    <option key={sub.id} value={sub.id}>
-                      — {sub.icon || ''} {sub.name}
-                    </option>
-                  ))
-                }
-              </optgroup>
-            ))}
-          </select>
-        </div>
-
-        {/* Date */}
-        <div>
-          <input
-            type="date"
-            value={form.date}
-            onChange={(e) => handleChange('date', e.target.value)}
-            required
-          />
-        </div>
-
-        {/* Description */}
-        <div>
-          <input
-            type="text"
-            placeholder="Description (optional)"
-            value={form.description}
-            onChange={(e) => handleChange('description', e.target.value)}
-          />
-        </div>
-
-        {error && <p style={{ color: 'red' }}>{error}</p>}
-
-        <button type="submit" disabled={saving}>
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-        <button type="button" onClick={() => navigate('/dashboard')}>
+    <div className="max-w-lg mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Edit Transaction</h1>
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="text-sm text-gray-400 hover:text-gray-600 transition"
+        >
           Cancel
         </button>
-        <button
-          type="button"
-          onClick={handleDelete}
-          disabled={deleting}
-          style={{ color: 'red' }}
-        >
-          {deleting ? 'Deleting...' : 'Delete Transaction'}
-        </button>
+      </div>
 
-      </form>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+        <form onSubmit={handleSave} className="space-y-5">
+
+          {/* Type toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <button
+              type="button"
+              onClick={() => handleChange('type', 'expense')}
+              className={`flex-1 py-2.5 text-sm font-medium transition ${
+                form.type === 'expense'
+                  ? 'bg-red-500 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Expense
+            </button>
+            <button
+              type="button"
+              onClick={() => handleChange('type', 'income')}
+              className={`flex-1 py-2.5 text-sm font-medium transition ${
+                form.type === 'income'
+                  ? 'bg-green-500 text-white'
+                  : 'bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              Income
+            </button>
+          </div>
+
+          {/* Amount + currency */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                placeholder="0.00"
+                min="0"
+                step="0.01"
+                value={form.amount}
+                onChange={(e) => handleChange('amount', e.target.value)}
+                required
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <select
+                value={form.currency}
+                onChange={(e) => handleChange('currency', e.target.value)}
+                className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="ILS">₪ ILS</option>
+                <option value="USD">$ USD</option>
+                <option value="EUR">€ EUR</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Category */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            <select
+              value={form.category_id}
+              onChange={(e) => handleChange('category_id', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select category</option>
+              {parentCategories.map(parent => (
+                <optgroup key={parent.id} label={`${parent.icon || ''} ${parent.name}`}>
+                  <option value={parent.id}>{parent.icon || ''} {parent.name}</option>
+                  {subCategories
+                    .filter(sub => sub.parent_id === parent.id)
+                    .map(sub => (
+                      <option key={sub.id} value={sub.id}>
+                        — {sub.icon || ''} {sub.name}
+                      </option>
+                    ))
+                  }
+                </optgroup>
+              ))}
+            </select>
+          </div>
+
+          {/* Date */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+            <input
+              type="date"
+              value={form.date}
+              onChange={(e) => handleChange('date', e.target.value)}
+              required
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Description <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Weekly groceries"
+              value={form.description}
+              onChange={(e) => handleChange('description', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition"
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="w-full border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50 font-medium py-2.5 rounded-lg transition"
+          >
+            {deleting ? 'Deleting...' : 'Delete Transaction'}
+          </button>
+
+        </form>
+      </div>
     </div>
   )
 }
