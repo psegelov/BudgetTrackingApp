@@ -59,11 +59,13 @@ function Dashboard({ household }) {
           </thead>
           <tbody>
             {transactions.map(t => (
-              <tr key={t.id}>
+              <tr
+                key={t.id}
+                onClick={() => navigate(`/edit/${t.id}`)}
+                style={{ cursor: 'pointer' }}
+              >
                 <td>{new Date(t.date).toLocaleDateString()}</td>
-                <td>
-                  {t.categories?.icon} {t.categories?.name ?? 'Uncategorised'}
-                </td>
+                <td>{t.categories?.icon} {t.categories?.name ?? 'Uncategorised'}</td>
                 <td>{t.description || '—'}</td>
                 <td style={{ color: t.type === 'expense' ? 'red' : 'green' }}>
                   {formatAmount(t.amount, t.currency, t.type)}

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import HouseholdSetup from './pages/HouseholdSetup'
 import AddTransaction from './pages/AddTransaction'
+import EditTransaction from './pages/EditTransaction'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -70,6 +71,14 @@ function App() {
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
           <AddTransaction session={session} household={household} />
+        }
+      />
+      <Route
+        path="/edit/:id"
+        element={
+          !session ? <Navigate to="/login" /> :
+          !household ? <Navigate to="/setup" /> :
+          <EditTransaction session={session} household={household} />
         }
       />
     <Route path="*" element={
