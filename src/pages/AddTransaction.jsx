@@ -10,14 +10,15 @@ function AddTransaction({ session, household }) {
 
   const today = new Date().toISOString().split('T')[0]
 
-  const [form, setForm] = useState({
-    type: 'expense',
-    amount: '',
-    currency: household.currency,
-    category_id: '',
-    date: today,
-    description: ''
-  })
+const [form, setForm] = useState({
+  type: 'expense',
+  amount: '',
+  currency: household.currency,
+  category_id: '',      // will hold the final category (parent or sub)
+  parent_category_id: '', // tracks selected parent
+  date: today,
+  description: ''
+})
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -33,17 +34,19 @@ function AddTransaction({ session, household }) {
     fetchCategories()
   }, [])
 
-  const handleChange = (field, value) => {
+    const handleChange = (field, value) => {
     setForm(prev => {
-      const updated = { ...prev, [field]: value }
-      if (field === 'type') updated.category_id = ''
-      return updated
+        const updated = { ...prev, [field]: value }
+        if (field === 'type') {
+        updated.category_id = ''
+        updated.parent_category_id = ''
+        }
+        if (field === 'parent_category_id') {
+        updated.category_id = value // default to parent if no sub selected
+        }
+        return updated
     })
-  }
-
-  const filteredCategories = categories.filter(c => c.type === form.type)
-  const parentCategories = filteredCategories.filter(c => !c.parent_id)
-  const subCategories = filteredCategories.filter(c => c.parent_id)
+    }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -163,30 +166,49 @@ function AddTransaction({ session, household }) {
             </div>
           </div>
 
-          {/* Category */}
-          <div>
+            {/* Parent Category */}
+            <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <select
-              value={form.category_id}
-              onChange={(e) => handleChange('category_id', e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={form.parent_category_id}
+                onChange={(e) => handleChange('parent_category_id', e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">Select category</option>
-              {parentCategories.map(parent => (
-                <optgroup key={parent.id} label={`${parent.icon || ''} ${parent.name}`}>
-                  <option value={parent.id}>{parent.icon || ''} {parent.name}</option>
-                  {subCategories
-                    .filter(sub => sub.parent_id === parent.id)
-                    .map(sub => (
-                      <option key={sub.id} value={sub.id}>
-                        — {sub.icon || ''} {sub.name}
-                      </option>
-                    ))
-                  }
-                </optgroup>
-              ))}
+                <option value="">Select category</option>
+                {categories
+                .filter(c => c.type === form.type && !c.parent_id)
+                .map(c => (
+                    <option key={c.id} value={c.id}>
+                    {c.icon} {c.name}
+                    </option>
+                ))
+                }
             </select>
-          </div>
+            </div>
+
+            {/* Subcategory — only shows if parent has subcategories */}
+            {form.parent_category_id && categories.some(c => c.parent_id === form.parent_category_id) && (
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subcategory <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <select
+                value={form.category_id === form.parent_category_id ? '' : form.category_id}
+                onChange={(e) => handleChange('category_id', e.target.value || form.parent_category_id)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                <option value="">None</option>
+                {categories
+                    .filter(c => c.parent_id === form.parent_category_id)
+                    .map(c => (
+                    <option key={c.id} value={c.id}>
+                        {c.icon} {c.name}
+                    </option>
+                    ))
+                }
+                </select>
+            </div>
+            )}
 
           {/* Date */}
           <div>
