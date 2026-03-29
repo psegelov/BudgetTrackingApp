@@ -9,6 +9,7 @@ import EditTransaction from './pages/EditTransaction'
 import Layout from './components/Layout'
 import ProfileSetup from './pages/ProfileSetup'
 import Settings from './pages/Settings'
+import JoinHousehold from './pages/JoinHousehold'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -126,8 +127,21 @@ if (session === undefined || household === undefined || profile === undefined) r
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
           <Layout household={household} setHousehold={setHousehold}>
-            <Settings session={session} household={household} setHousehold={setHousehold} />
+            <Settings 
+              session={session} 
+              household={household} 
+              setHousehold={setHousehold}
+              profile={profile}
+              setProfile={setProfile}
+            />
           </Layout>
+        }
+      />
+      <Route
+        path="/join/:token"
+        element={
+          !session ? <Navigate to="/login" /> :
+          <JoinHousehold session={session} />
         }
       />
       <Route path="*" element={

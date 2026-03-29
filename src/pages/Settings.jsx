@@ -1,39 +1,29 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-function Settings({ session, household, setHousehold }) {
+function Settings({ session, household, setHousehold, profile, setProfile }) {
   const [members, setMembers] = useState([])
   const [inviteLink, setInviteLink] = useState(null)
   const [householdName, setHouseholdName] = useState(household?.name || '')
-  const [fullName, setFullName] = useState('')
+  const [fullName, setFullName] = useState(profile?.full_name || '')
   const [savingHousehold, setSavingHousehold] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
+    useEffect(() => {
     const fetchData = async () => {
-      // Fetch members
-      const { data: memberData } = await supabase
+        const { data: memberData } = await supabase
         .from('household_members')
         .select('id, role, joined_at, profiles(full_name)')
         .eq('household_id', household.id)
 
-      if (memberData) setMembers(memberData)
-
-      // Fetch profile
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', session.user.id)
-        .single()
-
-      if (profileData) setFullName(profileData.full_name || '')
+        if (memberData) setMembers(memberData)
     }
 
     fetchData()
-  }, [household.id, session.user.id])
+    }, [household.id])
 
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
@@ -54,19 +44,23 @@ function Settings({ session, household, setHousehold }) {
     setSavingHousehold(false)
   }
 
-  const handleSaveProfile = async (e) => {
+    const handleSaveProfile = async (e) => {
     e.preventDefault()
     setSavingProfile(true)
     setError(null)
 
     const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ full_name: fullName })
-      .eq('id', session.user.id)
+        .from('profiles')
+        .upsert({ id: session.user.id, full_name: fullName })
 
-    if (updateError) setError(updateError.message)
+    if (updateError) {
+        setError(updateError.message)
+    } else {
+        setProfile({ ...profile, full_name: fullName })
+    }
+
     setSavingProfile(false)
-  }
+    }
 
   const handleGenerateInvite = async () => {
     setGeneratingInvite(true)
