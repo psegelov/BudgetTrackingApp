@@ -61,7 +61,7 @@ function App() {
         element={
           !session ? <Navigate to="/login" /> :
           !household ? <Navigate to="/setup" /> :
-          <Dashboard />
+          <Dashboard household={household} />
         }
       />
       <Route
