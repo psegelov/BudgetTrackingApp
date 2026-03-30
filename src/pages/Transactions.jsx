@@ -15,6 +15,7 @@ function Transactions({ household }) {
   const [endDate, setEndDate] = useState('')
   const [sortBy, setSortBy] = useState('date_desc')
   const [showFilters, setShowFilters] = useState(false)
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
 
   useEffect(() => {
     const fetchCategories = async () => {
@@ -141,15 +142,16 @@ function Transactions({ household }) {
     sortBy !== 'date_desc'
   ].filter(Boolean).length
 
-  const clearFilters = () => {
+    const clearFilters = () => {
     setFilterType('all')
     setSelectedCategories([])
     setExpandedParents([])
+    setShowCategoryDropdown(false)
     setStartDate('')
     setEndDate('')
     setSortBy('date_desc')
     setSearch('')
-  }
+    }
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -228,103 +230,123 @@ function Transactions({ household }) {
             </div>
           </div>
 
-          {/* Categories */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-2">
-              Categories
-              {selectedCategories.length > 0 && (
-                <span className="ml-2 text-blue-600">
-                  ({selectedCategories.length} selected)
-                </span>
-              )}
-            </label>
-            <div className="border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
-              {parentCategories.length === 0 && (
+        {/* Categories */}
+        <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2">
+            Categories
+            {selectedCategories.length > 0 && (
+            <span className="ml-2 text-blue-600">
+                ({selectedCategories.length} selected)
+            </span>
+            )}
+        </label>
+        <div className="border border-gray-200 rounded-lg overflow-hidden">
+            {/* Dropdown toggle */}
+            <button
+            type="button"
+            onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition"
+            >
+            <span>
+                {selectedCategories.length === 0
+                ? 'All categories'
+                : `${selectedCategories.length} selected`
+                }
+            </span>
+            <span className="text-gray-400">{showCategoryDropdown ? '▲' : '▼'}</span>
+            </button>
+
+            {/* Dropdown content */}
+            {showCategoryDropdown && (
+            <div className="border-t border-gray-100 max-h-52 overflow-y-auto">
+                {parentCategories.length === 0 && (
                 <p className="text-xs text-gray-400 px-3 py-2">No categories found.</p>
-              )}
-              {parentCategories.map(parent => {
+                )}
+                {parentCategories.map(parent => {
                 const subs = getSubsForParent(parent.id)
                 const isExpanded = expandedParents.includes(parent.id)
                 const isSelected = isParentSelected(parent.id)
                 const isPartial = isParentPartial(parent.id)
 
                 return (
-                  <div key={parent.id}>
+                    <div key={parent.id}>
                     <div className={`flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 ${
-                      isSelected ? 'bg-blue-50' : ''
+                        isSelected ? 'bg-blue-50' : ''
                     }`}>
-                      {/* Expand arrow */}
-                      {subs.length > 0 ? (
+                        {/* Expand arrow */}
+                        {subs.length > 0 ? (
                         <button
-                          onClick={() => toggleExpand(parent.id)}
-                          className="text-gray-400 hover:text-gray-600 w-4 text-xs"
+                            onClick={() => toggleExpand(parent.id)}
+                            className="text-gray-400 hover:text-gray-600 w-4 text-xs flex-shrink-0"
                         >
-                          {isExpanded ? '▼' : '▶'}
+                            {isExpanded ? '▼' : '▶'}
                         </button>
-                      ) : (
-                        <div className="w-4" />
-                      )}
+                        ) : (
+                        <div className="w-4 flex-shrink-0" />
+                        )}
 
-                      {/* Checkbox */}
-                      <button
+                        {/* Checkbox */}
+                        <button
                         onClick={() => toggleParent(parent)}
                         className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                          isSelected
+                            isSelected
                             ? 'bg-blue-600 border-blue-600'
                             : isPartial
                             ? 'bg-blue-200 border-blue-400'
                             : 'border-gray-300 hover:border-blue-400'
                         }`}
-                      >
+                        >
                         {isSelected && <span className="text-white text-xs">✓</span>}
                         {isPartial && <span className="text-blue-600 text-xs">—</span>}
-                      </button>
+                        </button>
 
-                      {/* Label */}
-                      <button
+                        {/* Label */}
+                        <button
                         onClick={() => toggleParent(parent)}
                         className="flex items-center gap-2 flex-1 text-left"
-                      >
+                        >
                         <span>{parent.icon}</span>
-                        <span className="text-sm text-gray-700">{parent.name}</span>
-                      </button>
+                        <span className="text-sm text-gray-700 font-medium">{parent.name}</span>
+                        </button>
                     </div>
 
                     {/* Subcategories */}
                     {isExpanded && subs.map(sub => {
-                      const isSubSelected = selectedCategories.includes(sub.id)
-                      return (
+                        const isSubSelected = selectedCategories.includes(sub.id)
+                        return (
                         <div
-                          key={sub.id}
-                          className={`flex items-center gap-2 px-3 py-2 pl-9 hover:bg-gray-50 ${
+                            key={sub.id}
+                            className={`flex items-center gap-2 px-3 py-2 pl-14 hover:bg-gray-50 ${
                             isSubSelected ? 'bg-blue-50' : ''
-                          }`}
+                            }`}
                         >
-                          <button
+                            <button
                             onClick={() => toggleSub(sub.id, parent.id)}
                             className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
-                              isSubSelected
+                                isSubSelected
                                 ? 'bg-blue-600 border-blue-600'
                                 : 'border-gray-300 hover:border-blue-400'
                             }`}
-                          >
+                            >
                             {isSubSelected && <span className="text-white text-xs">✓</span>}
-                          </button>
-                          <button
+                            </button>
+                            <button
                             onClick={() => toggleSub(sub.id, parent.id)}
                             className="flex items-center gap-2 flex-1 text-left"
-                          >
+                            >
                             <span>{sub.icon}</span>
-                            <span className="text-sm text-gray-500">{sub.name}</span>
-                          </button>
+                            <span className="text-sm text-gray-400">{sub.name}</span>
+                            </button>
                         </div>
-                      )
+                        )
                     })}
-                  </div>
+                    </div>
                 )
-              })}
+                })}
             </div>
-          </div>
+            )}
+        </div>
+        </div>
 
           {/* Date range */}
           <div className="grid grid-cols-2 gap-2">
