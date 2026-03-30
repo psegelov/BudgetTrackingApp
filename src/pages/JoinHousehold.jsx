@@ -11,6 +11,14 @@ function JoinHousehold({ session }) {
   const [error, setError] = useState(null)
 
   useEffect(() => {
+
+    // If not logged in, save token and redirect to login
+    if (!session) {
+      localStorage.setItem('pendingInviteToken', token)
+      navigate('/login')
+      return
+    }   
+     
     const fetchInvite = async () => {
       const { data, error } = await supabase
         .from('household_invites')

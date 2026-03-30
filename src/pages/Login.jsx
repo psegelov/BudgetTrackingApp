@@ -1,9 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate } from 'react-router-dom'
 
 function Login() {
-  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -11,7 +9,7 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [signUpSuccess, setSignUpSuccess] = useState(false)
 
-    const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
     setError(null)
@@ -19,60 +17,75 @@ function Login() {
     let result
 
     if (isSignUp) {
-        result = await supabase.auth.signUp({ email, password })
+      const pendingToken = localStorage.getItem('pendingInviteToken')
+      result = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: pendingToken
+            ? `${window.location.origin}/join/${pendingToken}`
+            : `${window.location.origin}/dashboard`
+        }
+      })
     } else {
-        result = await supabase.auth.signInWithPassword({ email, password })
+      result = await supabase.auth.signInWithPassword({ email, password })
     }
 
     if (result.error) {
-        setError(result.error.message)
-        setLoading(false)
-        return
+      setError(result.error.message)
+      setLoading(false)
+      return
     }
 
     if (isSignUp) {
-        setSignUpSuccess(true)
-        setLoading(false)
-        return
-        }
-
-    // Force a page reload — simplest way to re-run init() with the new session
-    window.location.href = '/dashboard'
+      setSignUpSuccess(true)
+      setLoading(false)
+      return
     }
 
-    if (signUpSuccess) {
-        return (
-            <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-            <div className="w-full max-w-sm text-center">
-                <div className="text-5xl mb-4">📧</div>
-                <h1 className="text-2xl font-bold text-gray-800 mb-2">Check your email</h1>
-                <p className="text-sm text-gray-400 mb-6">
-                We sent a confirmation link to <span className="font-medium text-gray-600">{email}</span>. 
-                Click it to activate your account.
-                </p>
-                <button
-                onClick={() => setSignUpSuccess(false)}
-                className="text-sm text-blue-600 hover:underline"
-                >
-                Back to login
-                </button>
-            </div>
-            </div>
-        )
-        }
+    // Check for pending invite (for login flow)
+    const pendingToken = localStorage.getItem('pendingInviteToken')
+    if (pendingToken) {
+      localStorage.removeItem('pendingInviteToken')
+      window.location.href = `/join/${pendingToken}`
+      return
+    }
+
+    window.location.href = '/dashboard'
+  }
+
+  if (signUpSuccess) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+        <div className="w-full max-w-sm text-center">
+          <div className="text-5xl mb-4">📧</div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Check your email</h1>
+          <p className="text-sm text-gray-400 mb-6">
+            We sent a confirmation link to{' '}
+            <span className="font-medium text-gray-600">{email}</span>.
+            Click it to activate your account.
+          </p>
+          <button
+            onClick={() => setSignUpSuccess(false)}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            Back to login
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">💰</div>
           <h1 className="text-2xl font-bold text-gray-800">Budget App</h1>
           <p className="text-sm text-gray-400 mt-1">Track your finances simply</p>
         </div>
 
-        {/* Card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-5">
             {isSignUp ? 'Create an account' : 'Welcome back'}

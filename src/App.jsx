@@ -50,22 +50,20 @@ useEffect(() => {
 
   init()
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_OUT') {
-      setSession(null)
-      setHousehold(null)
-      initDone.current = false
-    } else if (event === 'SIGNED_IN' && initDone.current) {
-      // Only handle SIGNED_IN after init — this means it's a fresh login not a page load
-      setSession(session)
-      const { data } = await supabase
-        .from('household_members')
-        .select('household_id, households(id, name, currency)')
-        .eq('user_id', session.user.id)
-        .maybeSingle()
-      setHousehold(data?.households ?? null)
+const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_OUT') {
+    setSession(null)
+    setHousehold(null)
+  } else if (event === 'SIGNED_IN') {
+    // Check for pending invite token
+    const pendingToken = localStorage.getItem('pendingInviteToken')
+    if (pendingToken) {
+      localStorage.removeItem('pendingInviteToken')
+      window.location.href = `/join/${pendingToken}`
+      return
     }
-  })
+  }
+})
 
   return () => subscription.unsubscribe()
 }, [])
@@ -172,10 +170,7 @@ if (session === undefined || household === undefined || profile === undefined) r
       />
       <Route
         path="/join/:token"
-        element={
-          !session ? <Navigate to="/login" /> :
-          <JoinHousehold session={session} />
-        }
+        element={<JoinHousehold session={session} />}
       />
       <Route path="*" element={
         !session ? <Navigate to="/login" /> :
