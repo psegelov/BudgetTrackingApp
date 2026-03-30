@@ -23,7 +23,9 @@ function Recurring({ session, household }) {
     frequency: 'monthly',
     start_date: today,
     end_date: '',
-    is_active: true
+    is_active: true,
+    auto_confirm: false
+
   }
 
   const [form, setForm] = useState(emptyForm)
@@ -72,7 +74,8 @@ function Recurring({ session, household }) {
       frequency: tmpl.frequency,
       start_date: tmpl.start_date,
       end_date: tmpl.end_date || '',
-      is_active: tmpl.is_active
+      is_active: tmpl.is_active,
+      auto_confirm: tmpl.auto_confirm || false
     })
     setError(null)
     setShowForm(true)
@@ -126,7 +129,8 @@ function Recurring({ session, household }) {
       start_date: form.start_date,
       end_date: form.end_date || null,
       next_due_date: nextDueDate,
-      is_active: form.is_active
+      is_active: form.is_active,
+      auto_confirm: form.auto_confirm
     }
 
     if (editingTemplate) {
@@ -227,7 +231,7 @@ function Recurring({ session, household }) {
                 <div>
                   <p className="text-sm font-medium text-gray-800">{tmpl.description}</p>
                   <p className="text-xs text-gray-400">
-                    {frequencyLabel[tmpl.frequency]} · next due {tmpl.next_due_date}
+                    {frequencyLabel[tmpl.frequency]} · next due {tmpl.next_due_date} · {tmpl.auto_confirm ? '⚡ Auto' : '✋ Manual'}
                   </p>
                 </div>
               </div>
@@ -371,6 +375,30 @@ function Recurring({ session, household }) {
                   <option value="monthly">Monthly</option>
                   <option value="yearly">Yearly</option>
                 </select>
+              </div>
+
+              {/* Auto confirm toggle */}
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <div>
+                  <p className="text-sm font-medium text-gray-700">Auto log</p>
+                  <p className="text-xs text-gray-400">
+                    {form.auto_confirm
+                      ? 'Logs automatically when due'
+                      : 'Asks you to confirm when due'
+                    }
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleChange('auto_confirm', !form.auto_confirm)}
+                  className={`relative w-10 h-6 rounded-full transition-colors ${
+                    form.auto_confirm ? 'bg-blue-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                    form.auto_confirm ? 'translate-x-5' : 'translate-x-1'
+                  }`} />
+                </button>
               </div>
 
               {/* Start date */}

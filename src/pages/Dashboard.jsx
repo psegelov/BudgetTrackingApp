@@ -21,7 +21,7 @@ function Dashboard({ household, session }) {
       const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
       const lastDay = new Date(selectedYear, selectedMonth + 1, 0)
       const endDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-      // Fetch transactions
+
       const { data, error } = await supabase
         .from('transactions')
         .select(`*, categories (name, icon, color, parent_id)`)
@@ -32,7 +32,6 @@ function Dashboard({ household, session }) {
 
       if (!error) setTransactions(data)
 
-      // Fetch due recurring templates (only for current month)
       const isCurrentMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear()
       if (isCurrentMonth) {
         const { data: due } = await supabase
@@ -43,8 +42,44 @@ function Dashboard({ household, session }) {
           .lte('next_due_date', endDate)
           .gte('next_due_date', startDate)
 
-        console.log('due templates:', due, 'startDate:', startDate, 'endDate:', endDate)
-        if (due) setDueTemplates(due)
+        if (due) {
+          const autoTemplates = due.filter(t => t.auto_confirm)
+          const manualTemplates = due.filter(t => !t.auto_confirm)
+
+          for (const tmpl of autoTemplates) {
+            const amount = parseFloat(tmpl.amount)
+
+            await supabase.from('transactions').insert({
+              household_id: household.id,
+              category_id: tmpl.category_id,
+              created_by: session.user.id,
+              type: tmpl.type,
+              date: tmpl.next_due_date,
+              description: tmpl.description,
+              amount: amount,
+              currency: tmpl.currency,
+              exchange_rate: 1,
+              amount_base: amount,
+              is_recurring: true,
+              recurring_id: tmpl.id
+            })
+
+            const next = new Date(tmpl.next_due_date)
+            if (tmpl.frequency === 'weekly') next.setDate(next.getDate() + 7)
+            else if (tmpl.frequency === 'biweekly') next.setDate(next.getDate() + 14)
+            else if (tmpl.frequency === 'monthly') next.setMonth(next.getMonth() + 1)
+            else if (tmpl.frequency === 'yearly') next.setFullYear(next.getFullYear() + 1)
+
+            const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
+
+            await supabase
+              .from('recurring_templates')
+              .update({ next_due_date: nextStr })
+              .eq('id', tmpl.id)
+          }
+
+          setDueTemplates(manualTemplates)
+        }
       } else {
         setDueTemplates([])
       }
