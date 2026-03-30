@@ -12,6 +12,7 @@ import Settings from './pages/Settings'
 import JoinHousehold from './pages/JoinHousehold'
 import Categories from './pages/Categories'
 import Recurring from './pages/Recurring'
+import Budgets from './pages/Budgets'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -156,6 +157,16 @@ if (session === undefined || household === undefined || profile === undefined) r
           !household ? <Navigate to="/setup" /> :
           <Layout household={household} setHousehold={setHousehold}>
             <Recurring session={session} household={household} />
+          </Layout>
+        }
+      />
+      <Route
+        path="/budgets"
+        element={
+          !session ? <Navigate to="/login" /> :
+          !household ? <Navigate to="/setup" /> :
+          <Layout household={household} setHousehold={setHousehold}>
+            <Budgets household={household} />
           </Layout>
         }
       />
