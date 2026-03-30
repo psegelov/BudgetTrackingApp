@@ -10,16 +10,28 @@ function ResetPassword() {
   const [error, setError] = useState(null)
   const [ready, setReady] = useState(false)
 
-  useEffect(() => {
-    // Supabase fires PASSWORD_RECOVERY event when user lands here from reset email
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') {
+    useEffect(() => {
+    // Handle the hash fragment from Supabase reset email
+    const handleReset = async () => {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (session) {
         setReady(true)
-      }
-    })
+        return
+        }
 
-    return () => subscription.unsubscribe()
-  }, [])
+        // Listen for PASSWORD_RECOVERY event
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+            setReady(true)
+        }
+        })
+
+        return () => subscription.unsubscribe()
+    }
+
+    handleReset()
+    }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
