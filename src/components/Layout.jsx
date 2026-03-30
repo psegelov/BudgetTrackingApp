@@ -10,6 +10,12 @@ const navItems = [
   { path: '/budgets', label: 'Budgets', icon: '🎯' },
 ]
 
+const bottomNavItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: '📊' },
+  { path: '/add', label: 'Add', icon: '➕' },
+  { path: '/settings', label: 'Settings', icon: '⚙️' },
+]
+
 function Layout({ children, household, setHousehold }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -110,7 +116,7 @@ function Layout({ children, household, setHousehold }) {
         <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="text-gray-600 hover:text-gray-800 transition"
+            className="text-gray-600 hover:text-gray-800 transition text-xl"
           >
             ☰
           </button>
@@ -121,11 +127,31 @@ function Layout({ children, household, setHousehold }) {
           <div className="w-6" />
         </div>
 
-        {/* Page content */}
-        <main className="max-w-4xl mx-auto px-4 py-6">
+        {/* Page content — add bottom padding on mobile for tab bar */}
+        <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
           {children}
         </main>
       </div>
+
+      {/* Mobile bottom tab bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 z-10">
+        <div className="flex">
+          {bottomNavItems.map(item => (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center justify-center py-3 gap-1 transition ${
+                  isActive ? 'text-blue-600' : 'text-gray-400'
+                }`
+              }
+            >
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-xs font-medium">{item.label}</span>
+            </NavLink>
+          ))}
+        </div>
+      </nav>
 
     </div>
   )
