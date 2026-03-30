@@ -29,6 +29,7 @@ function EditTransaction({ session, household }) {
     const { data: cats } = await supabase
         .from('categories')
         .select('id, name, type, parent_id, icon')
+        .eq('household_id', household.id)
         .eq('is_active', true)
         .order('sort_order')
 

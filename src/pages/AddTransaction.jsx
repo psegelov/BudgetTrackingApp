@@ -23,10 +23,11 @@ const [form, setForm] = useState({
   useEffect(() => {
     const fetchCategories = async () => {
       const { data } = await supabase
-        .from('categories')
-        .select('id, name, type, parent_id, icon')
-        .eq('is_active', true)
-        .order('sort_order')
+      .from('categories')
+      .select('id, name, type, parent_id, icon')
+      .eq('household_id', household.id)
+      .eq('is_active', true)
+      .order('sort_order')
 
       if (data) setCategories(data)
     }

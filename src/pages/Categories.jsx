@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
-const ICONS = ['🏠','🛒','🚗','💡','🍽️','🏥','🎬','📚','👕','📦','💰','💻','📈','💵','⛽','🚌','🅿️','🛡️','⚡','💧','📡','📱','🔥','🏪','🥦','💊','🏦','🏛️','🔧','🎁','💼','🎯','✈️','🏋️','🐾','🎵','🍕','☕','🛍️','💈']
+const ICONS = ['🏠','🛒','🚗','💡','🍽️','🏥','🎬','📚','👕','📦','💰','💻','📈','💵','⛽','🚌','🅿️','🛡️','⚡','💧','📡','📱','🔥','🏪','🥦','💊','🏦','🏛️','🔧','🎁','💼','🎯','✈️','🏋️','🐾','🎵','🍕','☕','🛍️','💈','🚙','🏛️']
 
 function Categories({ household }) {
   const [categories, setCategories] = useState([])
@@ -32,7 +32,7 @@ function Categories({ household }) {
     const { data } = await supabase
       .from('categories')
       .select('*')
-      .or(`household_id.eq.${household.id},household_id.is.null`)
+      .eq('household_id', household.id)
       .order('sort_order')
 
     if (data) setCategories(data)
@@ -50,10 +50,6 @@ function Categories({ household }) {
   }
 
   const handleEdit = (cat) => {
-    if (cat.household_id === null) {
-      setError('Global default categories cannot be edited. Hide it and create a custom one instead.')
-      return
-    }
     setEditingCategory(cat)
     setForm({
       name: cat.name,
@@ -117,13 +113,13 @@ function Categories({ household }) {
     setError(null)
 
     // Check for existing transactions
-    const { count } = await supabase
+    const { count: txCount } = await supabase
       .from('transactions')
       .select('id', { count: 'exact', head: true })
       .eq('category_id', editingCategory.id)
 
-    if (count > 0) {
-      setError(`This category has ${count} transaction${count > 1 ? 's' : ''} — reassign or delete them before removing this category.`)
+    if (txCount > 0) {
+      setError(`This category has ${txCount} transaction${txCount > 1 ? 's' : ''} — reassign or delete them before removing this category.`)
       setDeleting(false)
       return
     }
@@ -158,79 +154,106 @@ function Categories({ household }) {
   }
 
   const handleToggleActive = async (cat) => {
-    if (cat.household_id === null) {
-      // Global category — create a household-specific hidden override
-      const existing = categories.find(
-        c => c.household_id === household.id && c.name === cat.name && c.type === cat.type
-      )
-      if (existing) {
-        await supabase
-          .from('categories')
-          .update({ is_active: !existing.is_active })
-          .eq('id', existing.id)
-      } else {
-        await supabase
-          .from('categories')
-          .insert({
-            household_id: household.id,
-            parent_id: cat.parent_id,
-            name: cat.name,
-            type: cat.type,
-            icon: cat.icon,
-            color: cat.color,
-            sort_order: cat.sort_order,
-            is_active: false
-          })
+    // Optimistic update
+    setCategories(prev => prev.map(c => {
+      if (c.id === cat.id) return { ...c, is_active: !cat.is_active }
+      // Hide subcategories if hiding parent
+      if (!cat.parent_id && cat.is_active && c.parent_id === cat.id) return { ...c, is_active: false }
+      return c
+    }))
+
+    if (!cat.parent_id && cat.is_active) {
+      const subs = categories.filter(c => c.parent_id === cat.id)
+      for (const sub of subs) {
+        await supabase.from('categories').update({ is_active: false }).eq('id', sub.id)
       }
-    } else {
-      await supabase
-        .from('categories')
-        .update({ is_active: !cat.is_active })
-        .eq('id', cat.id)
     }
 
-    await fetchCategories()
+    await supabase
+      .from('categories')
+      .update({ is_active: !cat.is_active })
+      .eq('id', cat.id)
   }
 
-  const handleMoveUp = async (cat, list) => {
-    const index = list.findIndex(c => c.id === cat.id)
-    if (index === 0) return
-    const prev = list[index - 1]
-    await supabase.from('categories').update({ sort_order: prev.sort_order }).eq('id', cat.id)
-    await supabase.from('categories').update({ sort_order: cat.sort_order }).eq('id', prev.id)
-    await fetchCategories()
+  const handleMoveUp = async (cat) => {
+    let catId = cat.id
+    let newOrder = null
+
+    setCategories(prev_cats => {
+      const list = prev_cats.filter(c =>
+        c.type === cat.type &&
+        (cat.parent_id ? c.parent_id === cat.parent_id : !c.parent_id)
+      ).sort((a, b) => a.sort_order - b.sort_order)
+
+      const index = list.findIndex(c => c.id === catId)
+      if (index === 0) return prev_cats
+
+      const prev = list[index - 1]
+      const prevPrev = list[index - 2]
+
+      // Place between prevPrev and prev
+      newOrder = prevPrev
+        ? Math.floor((prevPrev.sort_order + prev.sort_order) / 2)
+        : prev.sort_order - 10
+
+      // If newOrder equals prev.sort_order, force a gap
+      if (newOrder >= prev.sort_order) newOrder = prev.sort_order - 10
+
+      return prev_cats.map(c =>
+        c.id === catId ? { ...c, sort_order: newOrder } : c
+      ).sort((a, b) => a.sort_order - b.sort_order)
+    })
+
+    setTimeout(async () => {
+      if (newOrder === null) return
+      await supabase.from('categories').update({ sort_order: newOrder }).eq('id', catId)
+    }, 0)
   }
 
-  const handleMoveDown = async (cat, list) => {
-    const index = list.findIndex(c => c.id === cat.id)
-    if (index === list.length - 1) return
+const handleMoveDown = async (cat) => {
+  let catId = cat.id
+  let newOrder = null
+
+  setCategories(prev_cats => {
+    const list = prev_cats.filter(c =>
+      c.type === cat.type &&
+      (cat.parent_id ? c.parent_id === cat.parent_id : !c.parent_id)
+    ).sort((a, b) => a.sort_order - b.sort_order)
+
+    const index = list.findIndex(c => c.id === catId)
+    if (index === list.length - 1) return prev_cats
+
     const next = list[index + 1]
-    await supabase.from('categories').update({ sort_order: next.sort_order }).eq('id', cat.id)
-    await supabase.from('categories').update({ sort_order: cat.sort_order }).eq('id', next.id)
-    await fetchCategories()
-  }
+    const nextNext = list[index + 2]
+
+    // Place between next and nextNext
+    newOrder = nextNext
+      ? Math.floor((next.sort_order + nextNext.sort_order) / 2)
+      : next.sort_order + 10
+
+    // If newOrder equals next.sort_order, force a gap
+    if (newOrder <= next.sort_order) newOrder = next.sort_order + 10
+
+    return prev_cats.map(c =>
+      c.id === catId ? { ...c, sort_order: newOrder } : c
+    ).sort((a, b) => a.sort_order - b.sort_order)
+  })
+
+  setTimeout(async () => {
+    if (newOrder === null) return
+    await supabase.from('categories').update({ sort_order: newOrder }).eq('id', catId)
+  }, 0)
+}
 
   const CategoryRow = ({ cat, list, indent = false }) => (
     <li className={`flex items-center justify-between py-3 ${indent ? 'pl-8' : ''} ${!cat.is_active ? 'opacity-40' : ''}`}>
       <div className="flex items-center gap-3">
         <span className="text-lg">{cat.icon}</span>
-        <div>
-          <p className="text-sm font-medium text-gray-800">{cat.name}</p>
-          <p className="text-xs text-gray-400">
-            {cat.household_id === null ? 'Global default' : 'Custom'}
-            {cat.parent_id ? ' · subcategory' : ''}
-          </p>
-        </div>
+        <p className="text-sm font-medium text-gray-800">{cat.name}</p>
       </div>
       <div className="flex items-center gap-1">
-        <button
-          onClick={() => handleMoveUp(cat, list)}
-          className="p-1.5 text-gray-400 hover:text-gray-600 transition"
-        >↑</button>
-        <button
-          onClick={() => handleMoveDown(cat, list)}
-          className="p-1.5 text-gray-400 hover:text-gray-600 transition"
-        >↓</button>
+        <button onClick={() => handleMoveUp(cat)}>↑</button>
+        <button onClick={() => handleMoveDown(cat)}>↓</button>
         <button
           onClick={() => handleToggleActive(cat)}
           className={`text-xs px-2 py-1 rounded-full transition ${
@@ -243,11 +266,7 @@ function Categories({ household }) {
         </button>
         <button
           onClick={() => handleEdit(cat)}
-          className={`text-xs px-2 py-1 rounded-full transition ${
-            cat.household_id === null
-              ? 'bg-gray-50 text-gray-400 cursor-not-allowed'
-              : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
-          }`}
+          className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
         >
           Edit
         </button>
@@ -300,13 +319,13 @@ function Categories({ household }) {
         <ul className="divide-y divide-gray-50 px-4">
           {parentCategories.map(parent => (
             <>
-              <CategoryRow key={parent.id} cat={parent} list={parentCategories} />
-              {subCategories
-                .filter(s => s.parent_id === parent.id)
-                .map(sub => (
-                  <CategoryRow key={sub.id} cat={sub} list={subCategories.filter(s => s.parent_id === parent.id)} indent />
-                ))
-              }
+            <CategoryRow key={parent.id} cat={parent} />
+            {subCategories
+              .filter(s => s.parent_id === parent.id)
+              .map(sub => (
+                <CategoryRow key={sub.id} cat={sub} indent />
+              ))
+            }
             </>
           ))}
           {parentCategories.length === 0 && (
@@ -430,8 +449,8 @@ function Categories({ household }) {
                 </button>
               </div>
 
-              {/* Delete button — only for custom categories */}
-              {editingCategory && editingCategory.household_id !== null && (
+              {/* Delete button */}
+              {editingCategory && (
                 <button
                   type="button"
                   onClick={handleDelete}
