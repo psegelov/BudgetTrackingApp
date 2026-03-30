@@ -3,27 +3,46 @@ import { supabase } from '../lib/supabase'
 
 function Settings({ session, household, setHousehold, profile, setProfile }) {
   const [members, setMembers] = useState([])
+  const [pendingInvites, setPendingInvites] = useState([])
   const [inviteLink, setInviteLink] = useState(null)
   const [householdName, setHouseholdName] = useState(household?.name || '')
+  const [householdCurrency, setHouseholdCurrency] = useState(household?.currency || 'ILS')
   const [fullName, setFullName] = useState(profile?.full_name || '')
   const [savingHousehold, setSavingHousehold] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState(null)
+  const [success, setSuccess] = useState(null)
 
-    useEffect(() => {
-    const fetchData = async () => {
-        const { data: memberData } = await supabase
-        .from('household_members')
-        .select('id, role, joined_at, profiles(full_name)')
-        .eq('household_id', household.id)
+  const isOwner = members.find(m => m.user_id === session.user.id)?.role === 'owner'
 
-        if (memberData) setMembers(memberData)
-    }
-
+  useEffect(() => {
     fetchData()
-    }, [household.id])
+  }, [household.id, session.user.id])
+
+  const fetchData = async () => {
+    const [{ data: memberData }, { data: inviteData }] = await Promise.all([
+      supabase
+        .from('household_members')
+        .select('id, role, joined_at, user_id, profiles(full_name)')
+        .eq('household_id', household.id),
+      supabase
+        .from('household_invites')
+        .select('id, invite_token, email, created_at, expires_at')
+        .eq('household_id', household.id)
+        .eq('status', 'pending')
+        .gt('expires_at', new Date().toISOString())
+    ])
+
+    if (memberData) setMembers(memberData)
+    if (inviteData) setPendingInvites(inviteData)
+  }
+
+  const showSuccess = (msg) => {
+    setSuccess(msg)
+    setTimeout(() => setSuccess(null), 3000)
+  }
 
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
@@ -32,62 +51,52 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
 
     const { error: updateError } = await supabase
       .from('households')
-      .update({ name: householdName })
+      .update({ name: householdName, currency: householdCurrency })
       .eq('id', household.id)
 
     if (updateError) {
       setError(updateError.message)
     } else {
-      setHousehold({ ...household, name: householdName })
+      setHousehold({ ...household, name: householdName, currency: householdCurrency })
+      showSuccess('Household updated.')
     }
 
     setSavingHousehold(false)
   }
 
-    const handleSaveProfile = async (e) => {
+  const handleSaveProfile = async (e) => {
     e.preventDefault()
     setSavingProfile(true)
     setError(null)
 
     const { error: updateError } = await supabase
-        .from('profiles')
-        .upsert({ id: session.user.id, full_name: fullName })
+      .from('profiles')
+      .upsert({ id: session.user.id, full_name: fullName })
 
     if (updateError) {
-        setError(updateError.message)
+      setError(updateError.message)
     } else {
-        setProfile({ ...profile, full_name: fullName })
+      setProfile({ ...profile, full_name: fullName })
+      showSuccess('Profile saved.')
     }
 
     setSavingProfile(false)
-    }
+  }
 
   const handleGenerateInvite = async () => {
     setGeneratingInvite(true)
     setError(null)
 
-    // Check for existing pending invite
-    const { data: existing } = await supabase
-      .from('household_invites')
-      .select('invite_token, expires_at')
-      .eq('household_id', household.id)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle()
-
+    const existing = pendingInvites[0]
     if (existing) {
       setInviteLink(`${window.location.origin}/join/${existing.invite_token}`)
       setGeneratingInvite(false)
       return
     }
 
-    // Create new invite
     const { data: invite, error: inviteError } = await supabase
       .from('household_invites')
-      .insert({
-        household_id: household.id,
-        invited_by: session.user.id
-      })
+      .insert({ household_id: household.id, invited_by: session.user.id })
       .select()
       .single()
 
@@ -95,9 +104,21 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
       setError(inviteError.message)
     } else {
       setInviteLink(`${window.location.origin}/join/${invite.invite_token}`)
+      await fetchData()
     }
 
     setGeneratingInvite(false)
+  }
+
+  const handleCancelInvite = async (inviteId) => {
+    await supabase
+      .from('household_invites')
+      .update({ status: 'expired' })
+      .eq('id', inviteId)
+
+    setInviteLink(null)
+    await fetchData()
+    showSuccess('Invite cancelled.')
   }
 
   const handleCopy = () => {
@@ -106,12 +127,37 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleRemoveMember = async (memberId, memberUserId) => {
+    if (memberUserId === session.user.id) {
+      setError("You can't remove yourself.")
+      return
+    }
+
+    if (!window.confirm('Remove this member from the household?')) return
+
+    const { error: removeError } = await supabase
+      .from('household_members')
+      .delete()
+      .eq('id', memberId)
+
+    if (removeError) {
+      setError(removeError.message)
+    } else {
+      await fetchData()
+      showSuccess('Member removed.')
+    }
+  }
+
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
 
       {error && (
         <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
+      )}
+
+      {success && (
+        <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">{success}</p>
       )}
 
       {/* Profile */}
@@ -159,6 +205,21 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Base currency</label>
+            <select
+              value={householdCurrency}
+              onChange={(e) => setHouseholdCurrency(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ILS">₪ ILS — Israeli Shekel</option>
+              <option value="USD">$ USD — US Dollar</option>
+              <option value="EUR">€ EUR — Euro</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              All totals and charts display in this currency.
+            </p>
+          </div>
           <button
             type="submit"
             disabled={savingHousehold}
@@ -178,6 +239,9 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
               <div>
                 <p className="text-sm font-medium text-gray-800">
                   {m.profiles?.full_name || 'Unknown'}
+                  {m.user_id === session.user.id && (
+                    <span className="text-xs text-gray-400 ml-1">(you)</span>
+                  )}
                 </p>
                 <p className="text-xs text-gray-400">
                   {m.role} · joined {new Date(m.joined_at).toLocaleDateString('en-GB', {
@@ -185,16 +249,53 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
                   })}
                 </p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded-full ${
-                m.role === 'owner'
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'bg-gray-100 text-gray-500'
-              }`}>
-                {m.role}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  m.role === 'owner' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
+                }`}>
+                  {m.role}
+                </span>
+                {isOwner && m.user_id !== session.user.id && (
+                  <button
+                    onClick={() => handleRemoveMember(m.id, m.user_id)}
+                    className="text-xs px-2 py-1 rounded-full border border-red-200 text-red-500 hover:bg-red-50 transition"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
             </li>
           ))}
         </ul>
+
+        {/* Pending invites */}
+        {pendingInvites.length > 0 && (
+          <div className="mb-4">
+            <p className="text-sm font-medium text-gray-700 mb-2">Pending invites</p>
+            <ul className="space-y-2">
+              {pendingInvites.map(invite => (
+                <li key={invite.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                  <div>
+                    <p className="text-xs text-gray-600 font-mono truncate max-w-[200px]">
+                      {`${window.location.origin}/join/${invite.invite_token}`}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      Expires {new Date(invite.expires_at).toLocaleDateString('en-GB', {
+                        day: 'numeric', month: 'short'
+                      })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleCancelInvite(invite.id)}
+                    className="text-xs text-red-500 hover:underline ml-2"
+                  >
+                    Cancel
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* Invite */}
         <div className="border-t border-gray-100 pt-4">
