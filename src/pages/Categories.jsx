@@ -12,6 +12,11 @@ function Categories({ household }) {
   const [error, setError] = useState(null)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [collapsed, setCollapsed] = useState({})
+
+  const toggleCollapse = (id) => {
+    setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
+  }
 
   const emptyForm = {
     name: '',
@@ -246,7 +251,7 @@ const handleMoveDown = async (cat) => {
 }
 
   const CategoryRow = ({ cat, list, indent = false }) => (
-    <li className={`flex items-center justify-between py-3 ${indent ? 'pl-8' : ''} ${!cat.is_active ? 'opacity-40' : ''}`}>
+    <li className={`flex items-center justify-between py-3 ${indent ? 'pl-12 border-l-2 border-gray-100 ml-4' : ''} ${!cat.is_active ? 'opacity-40' : ''}`}>
       <div className="flex items-center gap-3">
         <span className="text-lg">{cat.icon}</span>
         <p className="text-sm font-medium text-gray-800">{cat.name}</p>
@@ -317,17 +322,54 @@ const handleMoveDown = async (cat) => {
       {/* Category list */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100">
         <ul className="divide-y divide-gray-50 px-4">
-          {parentCategories.map(parent => (
-            <>
-            <CategoryRow key={parent.id} cat={parent} />
-            {subCategories
-              .filter(s => s.parent_id === parent.id)
-              .map(sub => (
-                <CategoryRow key={sub.id} cat={sub} indent />
-              ))
-            }
-            </>
-          ))}
+          {parentCategories.map(parent => {
+            const subs = subCategories.filter(s => s.parent_id === parent.id)
+            const isCollapsed = collapsed[parent.id]
+
+            return (
+              <>
+                <li key={parent.id} className={`flex items-center justify-between py-3 ${!parent.is_active ? 'opacity-40' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    {subs.length > 0 && (
+                      <button
+                        onClick={() => toggleCollapse(parent.id)}
+                        className="text-gray-400 hover:text-gray-600 transition text-xs w-4"
+                      >
+                        {isCollapsed ? '▶' : '▼'}
+                      </button>
+                    )}
+                    {subs.length === 0 && <div className="w-4" />}
+                    <span className="text-lg">{parent.icon}</span>
+                    <p className="text-sm font-medium text-gray-800">{parent.name}</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button onClick={() => handleMoveUp(parent)} className="p-1.5 text-gray-400 hover:text-gray-600 transition">↑</button>
+                    <button onClick={() => handleMoveDown(parent)} className="p-1.5 text-gray-400 hover:text-gray-600 transition">↓</button>
+                    <button
+                      onClick={() => handleToggleActive(parent)}
+                      className={`text-xs px-2 py-1 rounded-full transition ${
+                        parent.is_active
+                          ? 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          : 'bg-green-50 text-green-600 hover:bg-green-100'
+                      }`}
+                    >
+                      {parent.is_active ? 'Hide' : 'Show'}
+                    </button>
+                    <button
+                      onClick={() => handleEdit(parent)}
+                      className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </li>
+
+                {!isCollapsed && subs.map(sub => (
+                  <CategoryRow key={sub.id} cat={sub} indent />
+                ))}
+              </>
+            )
+          })}
           {parentCategories.length === 0 && (
             <li className="py-8 text-center text-gray-400 text-sm">
               No {activeType} categories yet.
