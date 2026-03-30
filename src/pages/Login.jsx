@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { useSearchParams } from 'react-router-dom'
 
 function Login() {
+  const [searchParams] = useSearchParams()
+  const inviteToken = searchParams.get('invite')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
@@ -16,20 +19,19 @@ function Login() {
 
     let result
 
-    if (isSignUp) {
-      const pendingToken = localStorage.getItem('pendingInviteToken')
-      result = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: pendingToken
-            ? `${window.location.origin}/join/${pendingToken}`
-            : `${window.location.origin}/dashboard`
-        }
-      })
-    } else {
-      result = await supabase.auth.signInWithPassword({ email, password })
-    }
+  if (isSignUp) {
+    result = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: inviteToken
+          ? `${window.location.origin}/join/${inviteToken}`
+          : `${window.location.origin}/dashboard`
+      }
+    })
+  } else {
+    result = await supabase.auth.signInWithPassword({ email, password })
+  }
 
     if (result.error) {
       setError(result.error.message)
@@ -51,6 +53,11 @@ function Login() {
       return
     }
 
+    // After successful login
+    if (inviteToken) {
+      window.location.href = `/join/${inviteToken}`
+      return
+    }
     window.location.href = '/dashboard'
   }
 
