@@ -391,12 +391,12 @@ function Recurring({ session, household }) {
                 <button
                   type="button"
                   onClick={() => handleChange('auto_confirm', !form.auto_confirm)}
-                  className={`relative w-10 h-6 rounded-full transition-colors ${
+                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
                     form.auto_confirm ? 'bg-blue-600' : 'bg-gray-300'
                   }`}
                 >
-                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    form.auto_confirm ? 'translate-x-5' : 'translate-x-1'
+                  <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${
+                    form.auto_confirm ? 'translate-x-5' : 'translate-x-0.5'
                   }`} />
                 </button>
               </div>

@@ -420,12 +420,12 @@ function Budgets({ household }) {
                 <button
                   type="button"
                   onClick={() => setForm(prev => ({ ...prev, repeats: !prev.repeats }))}
-                  className={`relative w-10 h-6 rounded-full transition-colors ${
+                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
                     form.repeats ? 'bg-blue-600' : 'bg-gray-300'
                   }`}
                 >
-                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    form.repeats ? 'translate-x-5' : 'translate-x-1'
+                  <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${
+                    form.repeats ? 'translate-x-5' : 'translate-x-0.5'
                   }`} />
                 </button>
               </div>
