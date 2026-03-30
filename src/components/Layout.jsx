@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
+  { path: '/transactions', label: 'Transactions', icon: '📋' },
   { path: '/add', label: 'Add Transaction', icon: '➕' },
   { path: '/categories', label: 'Categories', icon: '🏷️' },
   { path: '/recurring', label: 'Recurring', icon: '🔄' },
