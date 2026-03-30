@@ -1,33 +1,36 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { getExchangeRate } from '../lib/exchangeRates'
 
 function AddTransaction({ session, household }) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [categories, setCategories] = useState([])
+  const [liveRate, setLiveRate] = useState(null)
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
 
-const [form, setForm] = useState({
-  type: 'expense',
-  amount: '',
-  currency: household.currency,
-  category_id: '',      // will hold the final category (parent or sub)
-  parent_category_id: '', // tracks selected parent
-  date: today,
-  description: ''
-})
+  const [form, setForm] = useState({
+    type: 'expense',
+    amount: '',
+    currency: household.currency,
+    category_id: '',
+    parent_category_id: '',
+    date: todayStr,
+    description: ''
+  })
 
   useEffect(() => {
     const fetchCategories = async () => {
       const { data } = await supabase
-      .from('categories')
-      .select('id, name, type, parent_id, icon')
-      .eq('household_id', household.id)
-      .eq('is_active', true)
-      .order('sort_order')
+        .from('categories')
+        .select('id, name, type, parent_id, icon')
+        .eq('household_id', household.id)
+        .eq('is_active', true)
+        .order('sort_order')
 
       if (data) setCategories(data)
     }
@@ -35,19 +38,31 @@ const [form, setForm] = useState({
     fetchCategories()
   }, [])
 
-    const handleChange = (field, value) => {
+  useEffect(() => {
+    const fetchRate = async () => {
+      if (form.currency === household.currency) {
+        setLiveRate(null)
+        return
+      }
+      const rate = await getExchangeRate(form.currency, household.currency, form.date)
+      setLiveRate(rate)
+    }
+    fetchRate()
+  }, [form.currency, form.date])
+
+  const handleChange = (field, value) => {
     setForm(prev => {
-        const updated = { ...prev, [field]: value }
-        if (field === 'type') {
+      const updated = { ...prev, [field]: value }
+      if (field === 'type') {
         updated.category_id = ''
         updated.parent_category_id = ''
-        }
-        if (field === 'parent_category_id') {
-        updated.category_id = value // default to parent if no sub selected
-        }
-        return updated
+      }
+      if (field === 'parent_category_id') {
+        updated.category_id = value
+      }
+      return updated
     })
-    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -58,22 +73,16 @@ const [form, setForm] = useState({
     let amountBase = parseFloat(form.amount)
 
     if (form.currency !== household.currency) {
-      const { data: rateData } = await supabase
-        .from('exchange_rates')
-        .select('rate')
-        .eq('from_currency', form.currency)
-        .eq('to_currency', household.currency)
-        .eq('date', today)
-        .single()
+      const rate = await getExchangeRate(form.currency, household.currency, form.date)
 
-      if (rateData) {
-        exchangeRate = rateData.rate
-        amountBase = parseFloat(form.amount) * exchangeRate
-      } else {
-        setError('Could not find exchange rate for today. Please use ILS instead.')
+      if (!rate) {
+        setError('Could not fetch exchange rate. Please try again or use ILS.')
         setLoading(false)
         return
       }
+
+      exchangeRate = rate
+      amountBase = parseFloat(form.amount) * rate
     }
 
     const { error: insertError } = await supabase
@@ -99,6 +108,9 @@ const [form, setForm] = useState({
 
     navigate('/dashboard')
   }
+
+  const parentCategories = categories.filter(c => c.type === form.type && !c.parent_id)
+  const subCategories = categories.filter(c => c.type === form.type && c.parent_id)
 
   return (
     <div className="max-w-lg mx-auto">
@@ -165,51 +177,55 @@ const [form, setForm] = useState({
                 <option value="EUR">€ EUR</option>
               </select>
             </div>
+            {liveRate && form.currency !== household.currency && (
+              <p className="text-xs text-gray-400 mt-1">
+                1 {form.currency} = {liveRate} {household.currency}
+                {form.amount && (
+                  <span className="ml-2 text-gray-500 font-medium">
+                    → {household.currency === 'ILS' ? '₪' : household.currency === 'USD' ? '$' : '€'}
+                    {(parseFloat(form.amount) * liveRate).toLocaleString()}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
-            {/* Parent Category */}
-            <div>
+          {/* Parent Category */}
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <select
-                value={form.parent_category_id}
-                onChange={(e) => handleChange('parent_category_id', e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.parent_category_id}
+              onChange={(e) => handleChange('parent_category_id', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-                <option value="">Select category</option>
-                {categories
-                .filter(c => c.type === form.type && !c.parent_id)
-                .map(c => (
-                    <option key={c.id} value={c.id}>
-                    {c.icon} {c.name}
-                    </option>
-                ))
-                }
+              <option value="">Select category</option>
+              {parentCategories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
             </select>
-            </div>
+          </div>
 
-            {/* Subcategory — only shows if parent has subcategories */}
-            {form.parent_category_id && categories.some(c => c.parent_id === form.parent_category_id) && (
+          {/* Subcategory */}
+          {form.parent_category_id && subCategories.some(c => c.parent_id === form.parent_category_id) && (
             <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
                 Subcategory <span className="text-gray-400 font-normal">(optional)</span>
-                </label>
-                <select
+              </label>
+              <select
                 value={form.category_id === form.parent_category_id ? '' : form.category_id}
                 onChange={(e) => handleChange('category_id', e.target.value || form.parent_category_id)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
+              >
                 <option value="">None</option>
-                {categories
-                    .filter(c => c.parent_id === form.parent_category_id)
-                    .map(c => (
-                    <option key={c.id} value={c.id}>
-                        {c.icon} {c.name}
-                    </option>
-                    ))
+                {subCategories
+                  .filter(c => c.parent_id === form.parent_category_id)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                  ))
                 }
-                </select>
+              </select>
             </div>
-            )}
+          )}
 
           {/* Date */}
           <div>

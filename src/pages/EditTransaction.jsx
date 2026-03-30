@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useParams } from 'react-router-dom'
+import { getExchangeRate } from '../lib/exchangeRates'
 
 function EditTransaction({ session, household }) {
   const navigate = useNavigate()
@@ -10,43 +11,43 @@ function EditTransaction({ session, household }) {
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
   const [categories, setCategories] = useState([])
-  const [form, setForm] = useState(null)  
+  const [form, setForm] = useState(null)
+  const [liveRate, setLiveRate] = useState(null)
 
   useEffect(() => {
     const fetchData = async () => {
-    const { data: transaction, error: txError } = await supabase
+      const { data: transaction, error: txError } = await supabase
         .from('transactions')
         .select('*')
         .eq('id', id)
         .eq('household_id', household.id)
         .single()
 
-    if (txError || !transaction) {
+      if (txError || !transaction) {
         navigate('/dashboard')
         return
-    }
+      }
 
-    const { data: cats } = await supabase
+      const { data: cats } = await supabase
         .from('categories')
         .select('id, name, type, parent_id, icon')
         .eq('household_id', household.id)
         .eq('is_active', true)
         .order('sort_order')
 
-    setCategories(cats || [])
+      setCategories(cats || [])
 
-    // Find parent category for the loaded transaction
-    const loadedCategoryId = transaction.category_id
-    let parentId = loadedCategoryId
+      const loadedCategoryId = transaction.category_id
+      let parentId = loadedCategoryId
 
-    if (loadedCategoryId && cats) {
+      if (loadedCategoryId && cats) {
         const cat = cats.find(c => c.id === loadedCategoryId)
         if (cat?.parent_id) {
-        parentId = cat.parent_id
+          parentId = cat.parent_id
         }
-    }
+      }
 
-    setForm({
+      setForm({
         type: transaction.type,
         amount: transaction.amount,
         currency: transaction.currency,
@@ -54,54 +55,60 @@ function EditTransaction({ session, household }) {
         parent_category_id: parentId || '',
         date: transaction.date,
         description: transaction.description || ''
-    })
+      })
 
-    setLoading(false)
+      setLoading(false)
     }
 
     fetchData()
   }, [id, household.id])
 
-    const handleChange = (field, value) => {
+  useEffect(() => {
+    if (!form) return
+    const fetchRate = async () => {
+      if (form.currency === household.currency) {
+        setLiveRate(null)
+        return
+      }
+      const rate = await getExchangeRate(form.currency, household.currency, form.date)
+      setLiveRate(rate)
+    }
+    fetchRate()
+  }, [form?.currency, form?.date])
+
+  const handleChange = (field, value) => {
     setForm(prev => {
-        const updated = { ...prev, [field]: value }
-        if (field === 'type') {
+      const updated = { ...prev, [field]: value }
+      if (field === 'type') {
         updated.category_id = ''
         updated.parent_category_id = ''
-        }
-        if (field === 'parent_category_id') {
-        updated.category_id = value // default to parent if no sub selected
-        }
-        return updated
+      }
+      if (field === 'parent_category_id') {
+        updated.category_id = value
+      }
+      return updated
     })
-    }   
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
 
-    const today = new Date().toISOString().split('T')[0]
     let exchangeRate = 1
     let amountBase = parseFloat(form.amount)
 
     if (form.currency !== household.currency) {
-      const { data: rateData } = await supabase
-        .from('exchange_rates')
-        .select('rate')
-        .eq('from_currency', form.currency)
-        .eq('to_currency', household.currency)
-        .eq('date', today)
-        .single()
+      const rate = await getExchangeRate(form.currency, household.currency, form.date)
 
-      if (rateData) {
-        exchangeRate = rateData.rate
-        amountBase = parseFloat(form.amount) * exchangeRate
-      } else {
-        setError('Could not find exchange rate for today.')
+      if (!rate) {
+        setError('Could not fetch exchange rate. Please try again or use ILS.')
         setSaving(false)
         return
       }
+
+      exchangeRate = rate
+      amountBase = parseFloat(form.amount) * rate
     }
 
     const { error: updateError } = await supabase
@@ -145,6 +152,9 @@ function EditTransaction({ session, household }) {
     navigate('/dashboard')
   }
 
+  const filteredCategories = categories.filter(c => c.type === form?.type)
+  const parentCategories = filteredCategories.filter(c => !c.parent_id)
+  const subCategories = filteredCategories.filter(c => c.parent_id)
 
   if (loading) return (
     <div className="flex items-center justify-center py-20 text-gray-400">
@@ -217,51 +227,55 @@ function EditTransaction({ session, household }) {
                 <option value="EUR">€ EUR</option>
               </select>
             </div>
+            {liveRate && form.currency !== household.currency && (
+              <p className="text-xs text-gray-400 mt-1">
+                1 {form.currency} = {liveRate} {household.currency}
+                {form.amount && (
+                  <span className="ml-2 text-gray-500 font-medium">
+                    → {household.currency === 'ILS' ? '₪' : household.currency === 'USD' ? '$' : '€'}
+                    {(parseFloat(form.amount) * liveRate).toLocaleString()}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
-        {/* Parent Category */}
-        <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-        <select
-            value={form.parent_category_id}
-            onChange={(e) => handleChange('parent_category_id', e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-            <option value="">Select category</option>
-            {categories
-            .filter(c => c.type === form.type && !c.parent_id)
-            .map(c => (
-                <option key={c.id} value={c.id}>
-                {c.icon} {c.name}
-                </option>
-            ))
-            }
-        </select>
-        </div>
-
-        {/* Subcategory — only shows if parent has subcategories */}
-        {form.parent_category_id && categories.some(c => c.parent_id === form.parent_category_id) && (
-        <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-            Subcategory <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
+          {/* Parent Category */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
             <select
-            value={form.category_id === form.parent_category_id ? '' : form.category_id}
-            onChange={(e) => handleChange('category_id', e.target.value || form.parent_category_id)}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={form.parent_category_id}
+              onChange={(e) => handleChange('parent_category_id', e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-            <option value="">None</option>
-            {categories
-                .filter(c => c.parent_id === form.parent_category_id)
-                .map(c => (
-                <option key={c.id} value={c.id}>
-                    {c.icon} {c.name}
-                </option>
-                ))
-            }
+              <option value="">Select category</option>
+              {parentCategories.map(c => (
+                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+              ))}
             </select>
-        </div>
-        )}
+          </div>
+
+          {/* Subcategory */}
+          {form.parent_category_id && subCategories.some(c => c.parent_id === form.parent_category_id) && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subcategory <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <select
+                value={form.category_id === form.parent_category_id ? '' : form.category_id}
+                onChange={(e) => handleChange('category_id', e.target.value || form.parent_category_id)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">None</option>
+                {subCategories
+                  .filter(c => c.parent_id === form.parent_category_id)
+                  .map(c => (
+                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+                  ))
+                }
+              </select>
+            </div>
+          )}
 
           {/* Date */}
           <div>
