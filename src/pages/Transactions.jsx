@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -7,11 +7,10 @@ function Transactions({ household }) {
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
-
-  // Filters
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('all')
-  const [filterCategory, setFilterCategory] = useState('')
+  const [selectedCategories, setSelectedCategories] = useState([])
+  const [expandedParents, setExpandedParents] = useState([])
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [sortBy, setSortBy] = useState('date_desc')
@@ -21,7 +20,7 @@ function Transactions({ household }) {
     const fetchCategories = async () => {
       const { data } = await supabase
         .from('categories')
-        .select('id, name, icon, parent_id')
+        .select('id, name, icon, parent_id, type')
         .eq('household_id', household.id)
         .eq('is_active', true)
         .order('sort_order')
@@ -30,11 +29,7 @@ function Transactions({ household }) {
     fetchCategories()
   }, [household.id])
 
-  useEffect(() => {
-    fetchTransactions()
-  }, [household.id, filterType, filterCategory, startDate, endDate, sortBy])
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true)
 
     let query = supabase
@@ -43,9 +38,9 @@ function Transactions({ household }) {
       .eq('household_id', household.id)
 
     if (filterType !== 'all') query = query.eq('type', filterType)
-    if (filterCategory) query = query.eq('category_id', filterCategory)
     if (startDate) query = query.gte('date', startDate)
     if (endDate) query = query.lte('date', endDate)
+    if (selectedCategories.length > 0) query = query.in('category_id', selectedCategories)
 
     if (sortBy === 'date_desc') query = query.order('date', { ascending: false })
     else if (sortBy === 'date_asc') query = query.order('date', { ascending: true })
@@ -53,17 +48,78 @@ function Transactions({ household }) {
     else if (sortBy === 'amount_asc') query = query.order('amount_base', { ascending: true })
 
     const { data, error } = await query
-
     if (!error) setTransactions(data)
     setLoading(false)
-  }
+  }, [household.id, filterType, selectedCategories, startDate, endDate, sortBy])
 
-  // Client-side search filter
+  useEffect(() => {
+    fetchTransactions()
+  }, [fetchTransactions])
+
+  // Reset category selection when type changes
+  useEffect(() => {
+    setSelectedCategories([])
+    setExpandedParents([])
+  }, [filterType])
+
   const filtered = transactions.filter(t => {
     if (!search) return true
     return t.description?.toLowerCase().includes(search.toLowerCase()) ||
       t.categories?.name?.toLowerCase().includes(search.toLowerCase())
   })
+
+  const visibleCategories = filterType === 'all'
+    ? categories
+    : categories.filter(c => c.type === filterType)
+
+  const parentCategories = visibleCategories.filter(c => !c.parent_id)
+  const subCategories = visibleCategories.filter(c => c.parent_id)
+
+  const getSubsForParent = (parentId) =>
+    subCategories.filter(c => c.parent_id === parentId)
+
+  const isParentSelected = (parentId) => {
+    const subs = getSubsForParent(parentId)
+    if (subs.length === 0) return selectedCategories.includes(parentId)
+    return subs.every(s => selectedCategories.includes(s.id)) &&
+      selectedCategories.includes(parentId)
+  }
+
+  const isParentPartial = (parentId) => {
+    const subs = getSubsForParent(parentId)
+    if (subs.length === 0) return false
+    const anySubSelected = subs.some(s => selectedCategories.includes(s.id))
+    const allSubsSelected = subs.every(s => selectedCategories.includes(s.id))
+    return anySubSelected && !allSubsSelected
+  }
+
+  const toggleParent = (parent) => {
+    const subs = getSubsForParent(parent.id)
+    const allIds = [parent.id, ...subs.map(s => s.id)]
+    const allSelected = allIds.every(id => selectedCategories.includes(id))
+
+    if (allSelected) {
+      setSelectedCategories(prev => prev.filter(id => !allIds.includes(id)))
+    } else {
+      setSelectedCategories(prev => [...new Set([...prev, ...allIds])])
+    }
+  }
+
+  const toggleSub = (subId, parentId) => {
+    if (selectedCategories.includes(subId)) {
+      setSelectedCategories(prev => prev.filter(id => id !== subId))
+    } else {
+      setSelectedCategories(prev => [...prev, subId])
+    }
+  }
+
+  const toggleExpand = (parentId) => {
+    setExpandedParents(prev =>
+      prev.includes(parentId)
+        ? prev.filter(id => id !== parentId)
+        : [...prev, parentId]
+    )
+  }
 
   const formatAmount = (amount, currency, type) => {
     const symbol = currency === 'ILS' ? '₪' : currency === 'USD' ? '$' : '€'
@@ -77,12 +133,9 @@ function Transactions({ household }) {
     })
   }
 
-  const parentCategories = categories.filter(c => !c.parent_id)
-  const subCategories = categories.filter(c => c.parent_id)
-
   const activeFilterCount = [
     filterType !== 'all',
-    filterCategory !== '',
+    selectedCategories.length > 0,
     startDate !== '',
     endDate !== '',
     sortBy !== 'date_desc'
@@ -90,7 +143,8 @@ function Transactions({ household }) {
 
   const clearFilters = () => {
     setFilterType('all')
-    setFilterCategory('')
+    setSelectedCategories([])
+    setExpandedParents([])
     setStartDate('')
     setEndDate('')
     setSortBy('date_desc')
@@ -120,8 +174,8 @@ function Transactions({ household }) {
         />
       </div>
 
-      {/* Filter toggle */}
-      <div className="flex items-center justify-between mb-4">
+      {/* Filter toggle row */}
+      <div className="flex items-center gap-2 mb-4">
         <button
           onClick={() => setShowFilters(!showFilters)}
           className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition ${
@@ -140,58 +194,136 @@ function Transactions({ household }) {
         {activeFilterCount > 0 && (
           <button
             onClick={clearFilters}
-            className="text-xs text-red-500 hover:underline"
+            className="text-xs text-red-500 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-50 transition"
           >
-            Clear all
+            Remove filters
           </button>
         )}
-        <p className="text-xs text-gray-400">{filtered.length} transactions</p>
+        <p className="text-xs text-gray-400 ml-auto">{filtered.length} transactions</p>
       </div>
 
       {/* Filters panel */}
       {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 space-y-3">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 space-y-4">
 
           {/* Type */}
-          <div className="flex rounded-lg overflow-hidden border border-gray-200">
-            {['all', 'expense', 'income'].map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(type)}
-                className={`flex-1 py-2 text-sm font-medium transition capitalize ${
-                  filterType === type
-                    ? type === 'expense' ? 'bg-red-500 text-white'
-                    : type === 'income' ? 'bg-green-500 text-white'
-                    : 'bg-blue-600 text-white'
-                    : 'text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {type === 'all' ? 'All' : type}
-              </button>
-            ))}
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
+            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+              {['all', 'expense', 'income'].map(type => (
+                <button
+                  key={type}
+                  onClick={() => setFilterType(type)}
+                  className={`flex-1 py-2 text-sm font-medium transition capitalize ${
+                    filterType === type
+                      ? type === 'expense' ? 'bg-red-500 text-white'
+                      : type === 'income' ? 'bg-green-500 text-white'
+                      : 'bg-blue-600 text-white'
+                      : 'text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Category */}
+          {/* Categories */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Category</label>
-            <select
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All categories</option>
-              {parentCategories.map(parent => (
-                <optgroup key={parent.id} label={`${parent.icon} ${parent.name}`}>
-                  <option value={parent.id}>{parent.icon} {parent.name}</option>
-                  {subCategories
-                    .filter(s => s.parent_id === parent.id)
-                    .map(sub => (
-                      <option key={sub.id} value={sub.id}>— {sub.icon} {sub.name}</option>
-                    ))
-                  }
-                </optgroup>
-              ))}
-            </select>
+            <label className="block text-xs font-medium text-gray-500 mb-2">
+              Categories
+              {selectedCategories.length > 0 && (
+                <span className="ml-2 text-blue-600">
+                  ({selectedCategories.length} selected)
+                </span>
+              )}
+            </label>
+            <div className="border border-gray-200 rounded-lg overflow-hidden max-h-52 overflow-y-auto">
+              {parentCategories.length === 0 && (
+                <p className="text-xs text-gray-400 px-3 py-2">No categories found.</p>
+              )}
+              {parentCategories.map(parent => {
+                const subs = getSubsForParent(parent.id)
+                const isExpanded = expandedParents.includes(parent.id)
+                const isSelected = isParentSelected(parent.id)
+                const isPartial = isParentPartial(parent.id)
+
+                return (
+                  <div key={parent.id}>
+                    <div className={`flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 ${
+                      isSelected ? 'bg-blue-50' : ''
+                    }`}>
+                      {/* Expand arrow */}
+                      {subs.length > 0 ? (
+                        <button
+                          onClick={() => toggleExpand(parent.id)}
+                          className="text-gray-400 hover:text-gray-600 w-4 text-xs"
+                        >
+                          {isExpanded ? '▼' : '▶'}
+                        </button>
+                      ) : (
+                        <div className="w-4" />
+                      )}
+
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => toggleParent(parent)}
+                        className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                          isSelected
+                            ? 'bg-blue-600 border-blue-600'
+                            : isPartial
+                            ? 'bg-blue-200 border-blue-400'
+                            : 'border-gray-300 hover:border-blue-400'
+                        }`}
+                      >
+                        {isSelected && <span className="text-white text-xs">✓</span>}
+                        {isPartial && <span className="text-blue-600 text-xs">—</span>}
+                      </button>
+
+                      {/* Label */}
+                      <button
+                        onClick={() => toggleParent(parent)}
+                        className="flex items-center gap-2 flex-1 text-left"
+                      >
+                        <span>{parent.icon}</span>
+                        <span className="text-sm text-gray-700">{parent.name}</span>
+                      </button>
+                    </div>
+
+                    {/* Subcategories */}
+                    {isExpanded && subs.map(sub => {
+                      const isSubSelected = selectedCategories.includes(sub.id)
+                      return (
+                        <div
+                          key={sub.id}
+                          className={`flex items-center gap-2 px-3 py-2 pl-9 hover:bg-gray-50 ${
+                            isSubSelected ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          <button
+                            onClick={() => toggleSub(sub.id, parent.id)}
+                            className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                              isSubSelected
+                                ? 'bg-blue-600 border-blue-600'
+                                : 'border-gray-300 hover:border-blue-400'
+                            }`}
+                          >
+                            {isSubSelected && <span className="text-white text-xs">✓</span>}
+                          </button>
+                          <button
+                            onClick={() => toggleSub(sub.id, parent.id)}
+                            className="flex items-center gap-2 flex-1 text-left"
+                          >
+                            <span>{sub.icon}</span>
+                            <span className="text-sm text-gray-500">{sub.name}</span>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
           </div>
 
           {/* Date range */}
