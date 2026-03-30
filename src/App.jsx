@@ -13,6 +13,8 @@ import JoinHousehold from './pages/JoinHousehold'
 import Categories from './pages/Categories'
 import Recurring from './pages/Recurring'
 import Budgets from './pages/Budgets'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -168,6 +170,8 @@ if (session === undefined || household === undefined || profile === undefined) r
           </Layout>
         }
       />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       <Route
         path="/join/:token"
         element={<JoinHousehold session={session} />}
