@@ -135,7 +135,7 @@ function Layout({ children, household, setHousehold }) {
 
         {/* Page content — add bottom padding on mobile for tab bar */}
         <ToastContext.Provider value={toast}>
-          <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
+          <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6 overflow-hidden">
             {children}
           </main>
         </ToastContext.Provider>
