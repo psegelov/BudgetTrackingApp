@@ -11,18 +11,18 @@ const COLORS = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f9
 
 function SummaryCards({ totalIncome, totalExpenses, netBalance, formatBase }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
         <p className="text-xs text-gray-400 mb-1">Income</p>
-        <p className="text-sm md:text-lg font-bold text-green-500">{formatBase(totalIncome)}</p>
+        <p className="text-sm font-bold text-green-500 truncate">{formatBase(totalIncome)}</p>
       </div>
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
         <p className="text-xs text-gray-400 mb-1">Expenses</p>
-        <p className="text-sm md:text-lg font-bold text-red-500">{formatBase(totalExpenses)}</p>
+        <p className="text-sm font-bold text-red-500 truncate">{formatBase(totalExpenses)}</p>
       </div>
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 col-span-2 sm:col-span-1">
         <p className="text-xs text-gray-400 mb-1">Net</p>
-        <p className={`text-sm md:text-lg font-bold ${netBalance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+        <p className={`text-sm font-bold truncate ${netBalance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
           {netBalance >= 0 ? '+' : ''}{formatBase(netBalance)}
         </p>
       </div>
@@ -32,13 +32,13 @@ function SummaryCards({ totalIncome, totalExpenses, netBalance, formatBase }) {
 
 function BarChartSection({ monthlyData, selectedYears, formatBase }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Income vs Expenses</h2>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+      <ResponsiveContainer width="99%" height={220}>
+        <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="month" tick={{ fontSize: 10 }} interval={0} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval={0} />
+          <YAxis tick={{ fontSize: 9 }} />
           <Tooltip formatter={(val) => formatBase(val)} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {selectedYears.map((year, i) => (
@@ -55,13 +55,13 @@ function BarChartSection({ monthlyData, selectedYears, formatBase }) {
 
 function TrendLineSection({ monthlyData, selectedYears, formatBase }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Trend</h2>
-      <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+      <ResponsiveContainer width="99%" height={220}>
+        <LineChart data={monthlyData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="month" tick={{ fontSize: 10 }} interval={0} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval={0} />
+          <YAxis tick={{ fontSize: 9 }} />
           <Tooltip formatter={(val) => formatBase(val)} />
           <Legend wrapperStyle={{ fontSize: 11 }} />
           {selectedYears.map((year, i) => (
@@ -90,7 +90,7 @@ function CategoryBreakdown({ title, categoriesData, subCategories, transactions,
   const getSubTotal = (catId) => transactions.filter(t => t.category_id === catId).reduce((sum, t) => sum + Number(t.amount_base), 0)
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
       <div className="px-4 py-4 border-b border-gray-100">
         <h2 className="font-semibold text-gray-700">{title}</h2>
       </div>
@@ -98,7 +98,7 @@ function CategoryBreakdown({ title, categoriesData, subCategories, transactions,
         <div className="px-4 py-6 text-center text-gray-400 text-sm">No data.</div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[400px]">
+          <table className="w-full text-sm min-w-[380px]">
             <thead>
               <tr className="border-b border-gray-100">
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-400">Category</th>
@@ -212,7 +212,7 @@ function MonthlyAverages({ expenseCategories, incomeCategories, totalExpenses, t
   const total = view === 'expense' ? totalExpenses : view === 'income' ? totalIncome : totalExpenses + totalIncome
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-gray-700">Monthly Averages</h2>
         <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
@@ -222,12 +222,12 @@ function MonthlyAverages({ expenseCategories, incomeCategories, totalExpenses, t
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-400 mb-1">Avg monthly expenses</p>
-          <p className="text-base font-bold text-red-500">{formatBase(totalExpenses / monthsWithData)}</p>
+          <p className="text-sm font-bold text-red-500 truncate">{formatBase(totalExpenses / monthsWithData)}</p>
           <p className="text-xs text-gray-400 mt-1">Total: {formatBase(totalExpenses)}</p>
         </div>
         <div className="bg-gray-50 rounded-lg p-3">
           <p className="text-xs text-gray-400 mb-1">Avg monthly income</p>
-          <p className="text-base font-bold text-green-500">{formatBase(totalIncome / monthsWithData)}</p>
+          <p className="text-sm font-bold text-green-500 truncate">{formatBase(totalIncome / monthsWithData)}</p>
           <p className="text-xs text-gray-400 mt-1">Total: {formatBase(totalIncome)}</p>
         </div>
       </div>
@@ -304,7 +304,7 @@ function CategoryBarChart({ transactions, categories, subCategories, formatBase 
   const average = total / monthsWithData
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Breakdown</h2>
       <div className="flex gap-2 flex-wrap mb-4">
         <div className="flex rounded-lg overflow-hidden border border-gray-200">
@@ -334,14 +334,14 @@ function CategoryBarChart({ transactions, categories, subCategories, formatBase 
         Avg per active month: <span className="font-semibold text-gray-600">{formatBase(average)}</span>
         <span className="ml-2 text-gray-300">({monthsWithData} month{monthsWithData !== 1 ? 's' : ''})</span>
       </p>
-      <ResponsiveContainer width="100%" height={220}>
-        <BarChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+      <ResponsiveContainer width="99%" height={220}>
+        <BarChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="month" tick={{ fontSize: 10 }} interval={0} />
-          <YAxis tick={{ fontSize: 10 }} />
+          <XAxis dataKey="month" tick={{ fontSize: 9 }} interval={0} />
+          <YAxis tick={{ fontSize: 9 }} />
           <Tooltip formatter={(val) => formatBase(val)} />
           <ReferenceLine y={average} stroke="#6366f1" strokeDasharray="5 5" strokeWidth={2}
-            label={{ value: `Avg: ${formatBase(average)}`, position: 'insideTopRight', fontSize: 10, fill: '#6366f1' }} />
+            label={{ value: `Avg: ${formatBase(average)}`, position: 'insideTopRight', fontSize: 9, fill: '#6366f1' }} />
           <Bar dataKey="amount" name={chartType === 'expense' ? 'Expenses' : 'Income'}
             fill={chartType === 'expense' ? '#ef4444' : '#22c55e'} radius={[4, 4, 0, 0]} />
         </BarChart>
@@ -436,11 +436,10 @@ function Analytics({ household }) {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 w-full min-w-0 overflow-hidden">
+    <div className="max-w-2xl mx-auto space-y-4 w-full pb-20">
       <h1 className="text-2xl font-bold text-gray-800">Analytics</h1>
 
-      {/* Filter bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3 overflow-hidden">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">Year</p>
           <div className="flex gap-2 flex-wrap">
@@ -457,21 +456,14 @@ function Analytics({ household }) {
             Month
             {selectedMonths.length > 0 && <button onClick={() => setSelectedMonths([])} className="ml-2 text-blue-600 hover:underline font-normal">Clear</button>}
           </p>
-            <div className="flex gap-1 flex-wrap">
+          <div className="flex gap-1 flex-wrap">
             {MONTHS.map((m, i) => (
-                <button
-                key={i}
-                onClick={() => toggleMonth(i)}
-                className={`px-2 py-1 rounded-lg text-xs font-medium transition ${
-                    selectedMonths.includes(i)
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-                >
+              <button key={i} onClick={() => toggleMonth(i)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition ${selectedMonths.includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
                 {m}
-                </button>
+              </button>
             ))}
-            </div>
+          </div>
         </div>
       </div>
 
