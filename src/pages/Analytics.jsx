@@ -436,11 +436,11 @@ function Analytics({ household }) {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="max-w-4xl mx-auto space-y-4 w-full min-w-0">
       <h1 className="text-2xl font-bold text-gray-800">Analytics</h1>
 
       {/* Filter bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3 overflow-hidden">
         <div>
           <p className="text-xs font-medium text-gray-500 mb-2">Year</p>
           <div className="flex gap-2 flex-wrap">
@@ -457,14 +457,21 @@ function Analytics({ household }) {
             Month
             {selectedMonths.length > 0 && <button onClick={() => setSelectedMonths([])} className="ml-2 text-blue-600 hover:underline font-normal">Clear</button>}
           </p>
-          <div className="flex gap-1 flex-wrap">
+            <div className="flex gap-1 flex-wrap">
             {MONTHS.map((m, i) => (
-              <button key={i} onClick={() => toggleMonth(i)}
-                className={`px-2 py-1 rounded-lg text-xs font-medium transition ${selectedMonths.includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                <button
+                key={i}
+                onClick={() => toggleMonth(i)}
+                className={`px-2 py-1 rounded-lg text-xs font-medium transition ${
+                    selectedMonths.includes(i)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                >
                 {m}
-              </button>
+                </button>
             ))}
-          </div>
+            </div>
         </div>
       </div>
 
