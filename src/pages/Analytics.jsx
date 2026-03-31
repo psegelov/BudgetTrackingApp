@@ -32,7 +32,7 @@ function SummaryCards({ totalIncome, totalExpenses, netBalance, formatBase }) {
 
 function BarChartSection({ monthlyData, selectedYears, formatBase }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Income vs Expenses</h2>
       <ResponsiveContainer width="100%" height={220}>
         <BarChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
@@ -55,7 +55,7 @@ function BarChartSection({ monthlyData, selectedYears, formatBase }) {
 
 function TrendLineSection({ monthlyData, selectedYears, formatBase }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Trend</h2>
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={monthlyData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
@@ -90,7 +90,7 @@ function CategoryBreakdown({ title, categoriesData, subCategories, transactions,
   const getSubTotal = (catId) => transactions.filter(t => t.category_id === catId).reduce((sum, t) => sum + Number(t.amount_base), 0)
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       <div className="px-4 py-4 border-b border-gray-100">
         <h2 className="font-semibold text-gray-700">{title}</h2>
       </div>
@@ -212,7 +212,7 @@ function MonthlyAverages({ expenseCategories, incomeCategories, totalExpenses, t
   const total = view === 'expense' ? totalExpenses : view === 'income' ? totalIncome : totalExpenses + totalIncome
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-semibold text-gray-700">Monthly Averages</h2>
         <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
@@ -436,7 +436,7 @@ function Analytics({ household }) {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 w-full min-w-0">
+    <div className="max-w-4xl mx-auto space-y-4 w-full min-w-0 overflow-hidden">
       <h1 className="text-2xl font-bold text-gray-800">Analytics</h1>
 
       {/* Filter bar */}
