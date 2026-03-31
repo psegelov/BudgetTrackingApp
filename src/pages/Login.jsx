@@ -73,16 +73,6 @@ function Login() {
       return
     }
 
-    // 2. REDIRECT LOGIC: Check localStorage first, then the URL
-    const storedToken = localStorage.getItem('pendingInviteToken')
-    if (storedToken) {
-      localStorage.removeItem('pendingInviteToken')
-      navigate(`/join/${storedToken}`)
-    } else if (inviteToken) {
-      navigate(`/join/${inviteToken}`)
-    } else {
-      navigate('/dashboard')
-    }
   }
 
   if (signUpSuccess) {
