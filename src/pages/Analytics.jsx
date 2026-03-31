@@ -2,30 +2,548 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ReferenceLine
 } from 'recharts'
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const COLORS = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316','#ec4899']
+
+// ─── Sub-components ───────────────────────────────────────────
+
+function SummaryCards({ totalIncome, totalExpenses, netBalance, formatBase }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <p className="text-xs text-gray-400 mb-1">Income</p>
+        <p className="text-lg font-bold text-green-500">{formatBase(totalIncome)}</p>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <p className="text-xs text-gray-400 mb-1">Expenses</p>
+        <p className="text-lg font-bold text-red-500">{formatBase(totalExpenses)}</p>
+      </div>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <p className="text-xs text-gray-400 mb-1">Net</p>
+        <p className={`text-lg font-bold ${netBalance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          {netBalance >= 0 ? '+' : ''}{formatBase(netBalance)}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function BarChartSection({ monthlyData, selectedYears, formatBase }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <h2 className="font-semibold text-gray-700 mb-4">Monthly Income vs Expenses</h2>
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={monthlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="month" tick={{ fontSize: 11 }} interval={0} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip formatter={(val) => formatBase(val)} />
+          <Legend />
+            {selectedYears.map((year, i) => (
+            <>
+                <Bar 
+                key={`income_${year}`} 
+                dataKey={`income_${year}`} 
+                name={selectedYears.length > 1 ? `Income ${year}` : 'Income'} 
+                fill={i === 0 ? '#22c55e' : '#86efac'} 
+                />
+                <Bar 
+                key={`expenses_${year}`} 
+                dataKey={`expenses_${year}`} 
+                name={selectedYears.length > 1 ? `Expenses ${year}` : 'Expenses'} 
+                fill={i === 0 ? '#ef4444' : '#fca5a5'} 
+                />
+            </>
+            ))}
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function TrendLineSection({ monthlyData, selectedYears, formatBase }) {
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <h2 className="font-semibold text-gray-700 mb-4">Monthly Trend</h2>
+      <ResponsiveContainer width="100%" height={280}>
+        <LineChart data={monthlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="month" tick={{ fontSize: 11 }} interval={0} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip formatter={(val) => formatBase(val)} />
+          <Legend />
+            {selectedYears.map((year, i) => (
+            <>
+                <Line 
+                key={`income_${year}`} 
+                type="monotone" 
+                dataKey={`income_${year}`} 
+                name={selectedYears.length > 1 ? `Income ${year}` : 'Income'} 
+                stroke={i === 0 ? '#22c55e' : '#86efac'} 
+                strokeWidth={2} 
+                dot={false} 
+                />
+                <Line 
+                key={`expenses_${year}`} 
+                type="monotone" 
+                dataKey={`expenses_${year}`} 
+                name={selectedYears.length > 1 ? `Expenses ${year}` : 'Expenses'} 
+                stroke={i === 0 ? '#ef4444' : '#fca5a5'} 
+                strokeWidth={2} 
+                dot={false} 
+                />
+            </>
+            ))}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+function CategoryBreakdown({ title, categoriesData, subCategories, transactions, totalExpenses, totalIncome, type, formatBase, formatDate }) {
+  const [expandedCategories, setExpandedCategories] = useState([])
+  const [expandedSubs, setExpandedSubs] = useState([])
+
+  const toggleCategory = (id) => setExpandedCategories(prev =>
+    prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+  )
+
+  const toggleSub = (id) => setExpandedSubs(prev =>
+    prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+  )
+
+  const getCategoryTransactions = (catId) =>
+    transactions.filter(t => t.category_id === catId)
+
+  const getSubTotal = (catId) =>
+    transactions.filter(t => t.category_id === catId).reduce((sum, t) => sum + Number(t.amount_base), 0)
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="px-5 py-4 border-b border-gray-100">
+        <h2 className="font-semibold text-gray-700">{title}</h2>
+      </div>
+
+      {categoriesData.length === 0 ? (
+        <div className="px-5 py-6 text-center text-gray-400 text-sm">No data.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+            <tr className="border-b border-gray-100">
+                <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Category</th>
+                <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Amount</th>
+                <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">% of Expenses</th>
+                {type === 'expense' && (
+                <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">% of Income</th>
+                )}
+                <th className="w-8"></th>
+            </tr>
+            </thead>
+            <tbody>
+                {categoriesData.map((cat, i) => {
+                    const isCatExpanded = expandedCategories.includes(cat.id)
+                    const subs = subCategories
+                    .filter(s => s.parent_id === cat.id)
+                    .map(s => ({ ...s, total: getSubTotal(s.id) }))
+                    .filter(s => s.total > 0)
+                    .sort((a, b) => b.total - a.total)
+                    const directTx = getCategoryTransactions(cat.id)
+                    const hasChildren = subs.length > 0 || directTx.length > 0
+
+                    return (
+                    <>
+                        {/* Parent category row */}
+                        <tr
+                        key={cat.id}
+                        className={`border-b border-gray-50 ${hasChildren ? 'cursor-pointer hover:bg-gray-50' : ''}`}
+                        onClick={() => hasChildren && toggleCategory(cat.id)}
+                        >
+                        <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                            <span>{cat.icon}</span>
+                            <span className="font-medium text-gray-800">{cat.name}</span>
+                            </div>
+                        </td>
+                        <td className={`px-5 py-3 text-right font-semibold ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+                            {formatBase(cat.total)}
+                        </td>
+                        <td className="px-5 py-3 text-right text-gray-500">
+                            {type === 'expense'
+                            ? totalExpenses > 0 ? Math.round((cat.total / totalExpenses) * 100) : 0
+                            : totalIncome > 0 ? Math.round((cat.total / totalIncome) * 100) : 0
+                            }%
+                        </td>
+                        {type === 'expense' && (
+                            <td className="px-5 py-3 text-right text-gray-500">
+                            {totalIncome > 0 ? Math.round((cat.total / totalIncome) * 100) : 0}%
+                            </td>
+                        )}
+                        <td className="px-5 py-3 text-center text-gray-400 text-xs">
+                            {hasChildren ? (isCatExpanded ? '▼' : '▶') : ''}
+                        </td>
+                        </tr>
+
+                        {/* Expanded: subcategories */}
+                        {isCatExpanded && subs.map(sub => {
+                        const isSubExpanded = expandedSubs.includes(sub.id)
+                        const subTx = getCategoryTransactions(sub.id)
+
+                        return (
+                            <>
+                            <tr
+                                key={sub.id}
+                                className="border-b border-gray-50 bg-gray-50 cursor-pointer hover:bg-gray-100"
+                                onClick={() => subTx.length > 0 && toggleSub(sub.id)}
+                            >
+                                <td className="px-5 py-2.5 pl-12">
+                                <div className="flex items-center gap-2">
+                                    <span>{sub.icon}</span>
+                                    <span className="text-gray-700">{sub.name}</span>
+                                </div>
+                                </td>
+                                <td className={`px-5 py-2.5 text-right font-medium ${type === 'expense' ? 'text-red-400' : 'text-green-400'}`}>
+                                {formatBase(sub.total)}
+                                </td>
+                                <td className="px-5 py-2.5 text-right text-gray-400 text-xs">
+                                {type === 'expense'
+                                    ? totalExpenses > 0 ? Math.round((sub.total / totalExpenses) * 100) : 0
+                                    : totalIncome > 0 ? Math.round((sub.total / totalIncome) * 100) : 0
+                                }%
+                                </td>
+                                {type === 'expense' && (
+                                <td className="px-5 py-2.5 text-right text-gray-400 text-xs">
+                                    {totalIncome > 0 ? Math.round((sub.total / totalIncome) * 100) : 0}%
+                                </td>
+                                )}
+                                <td className="px-5 py-2.5 text-center text-gray-400 text-xs">
+                                {subTx.length > 0 ? (isSubExpanded ? '▼' : '▶') : ''}
+                                </td>
+                            </tr>
+
+                            {/* Subcategory transactions */}
+                            {isSubExpanded && subTx.map(t => (
+                                <tr key={t.id} className="border-b border-gray-50 bg-blue-50">
+                                <td className="px-5 py-2 pl-20">
+                                    <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400">{formatDate(t.date)}</span>
+                                    <span className="text-xs text-gray-600">{t.description || '—'}</span>
+                                    </div>
+                                </td>
+                                <td className={`px-5 py-2 text-right text-xs font-medium ${type === 'expense' ? 'text-red-400' : 'text-green-400'}`}>
+                                    {formatBase(t.amount_base)}
+                                </td>
+                                <td className="px-5 py-2 text-right text-xs text-gray-400">
+                                    {type === 'expense'
+                                    ? totalExpenses > 0 ? Math.round((Number(t.amount_base) / totalExpenses) * 100) : 0
+                                    : totalIncome > 0 ? Math.round((Number(t.amount_base) / totalIncome) * 100) : 0
+                                    }%
+                                </td>
+                                {type === 'expense' && (
+                                    <td className="px-5 py-2 text-right text-xs text-gray-400">
+                                    {totalIncome > 0 ? Math.round((Number(t.amount_base) / totalIncome) * 100) : 0}%
+                                    </td>
+                                )}
+                                <td></td>
+                                </tr>
+                            ))}
+                            </>
+                        )
+                        })}
+
+                        {/* Direct category transactions (no subcategory) */}
+                        {isCatExpanded && subs.length === 0 && directTx.map(t => (
+                        <tr key={t.id} className="border-b border-gray-50 bg-blue-50">
+                            <td className="px-5 py-2 pl-12">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400">{formatDate(t.date)}</span>
+                                <span className="text-xs text-gray-600">{t.description || '—'}</span>
+                            </div>
+                            </td>
+                            <td className={`px-5 py-2 text-right text-xs font-medium ${type === 'expense' ? 'text-red-400' : 'text-green-400'}`}>
+                            {formatBase(t.amount_base)}
+                            </td>
+                            <td className="px-5 py-2 text-right text-xs text-gray-400">
+                            {type === 'expense'
+                                ? totalExpenses > 0 ? Math.round((Number(t.amount_base) / totalExpenses) * 100) : 0
+                                : totalIncome > 0 ? Math.round((Number(t.amount_base) / totalIncome) * 100) : 0
+                            }%
+                            </td>
+                            {type === 'expense' && (
+                            <td className="px-5 py-2 text-right text-xs text-gray-400">
+                                {totalIncome > 0 ? Math.round((Number(t.amount_base) / totalIncome) * 100) : 0}%
+                            </td>
+                            )}
+                            <td></td>
+                        </tr>
+                        ))}
+                    </>
+                    )
+                })}
+
+                {/* Total row */}
+                <tr className="border-t-2 border-gray-200">
+                    <td className="px-5 py-3 font-semibold text-gray-700">Total</td>
+                    <td className={`px-5 py-3 text-right font-bold ${type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+                    {formatBase(categoriesData.reduce((sum, c) => sum + c.total, 0))}
+                    </td>
+                    <td className="px-5 py-3 text-right text-gray-500 font-medium">100%</td>
+                    {type === 'expense' && (
+                    <td className="px-5 py-3 text-right text-gray-500 font-medium">
+                        {totalIncome > 0 ? Math.round((categoriesData.reduce((sum, c) => sum + c.total, 0) / totalIncome) * 100) : 0}%
+                    </td>
+                    )}
+                    <td></td>
+                </tr>
+                </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MonthlyAverages({ expenseCategories, incomeCategories, totalExpenses, totalIncome, monthsWithData, formatBase }) {
+  const [view, setView] = useState('all')
+
+  const categories = view === 'expense' ? expenseCategories : view === 'income' ? incomeCategories : [...expenseCategories, ...incomeCategories]
+  const total = view === 'expense' ? totalExpenses : view === 'income' ? totalIncome : totalExpenses + totalIncome
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="font-semibold text-gray-700">Monthly Averages</h2>
+        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-1 rounded-lg">
+          Based on {monthsWithData} month{monthsWithData !== 1 ? 's' : ''} with data
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-400 mb-1">Avg monthly expenses</p>
+          <p className="text-lg font-bold text-red-500">{formatBase(totalExpenses / monthsWithData)}</p>
+          <p className="text-xs text-gray-400 mt-1">Total: {formatBase(totalExpenses)}</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-3">
+          <p className="text-xs text-gray-400 mb-1">Avg monthly income</p>
+          <p className="text-lg font-bold text-green-500">{formatBase(totalIncome / monthsWithData)}</p>
+          <p className="text-xs text-gray-400 mt-1">Total: {formatBase(totalIncome)}</p>
+        </div>
+      </div>
+
+      {/* Toggle */}
+      <div className="flex rounded-lg overflow-hidden border border-gray-200 mb-4">
+        {['all', 'expense', 'income'].map(type => (
+          <button
+            key={type}
+            onClick={() => setView(type)}
+            className={`flex-1 py-2 text-xs font-medium transition capitalize ${
+              view === type
+                ? type === 'expense' ? 'bg-red-500 text-white'
+                : type === 'income' ? 'bg-green-500 text-white'
+                : 'bg-blue-600 text-white'
+                : 'text-gray-500 hover:bg-gray-50'
+            }`}
+          >
+            {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
+          </button>
+        ))}
+      </div>
+
+      {/* Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-100">
+              <th className="text-left py-2 text-xs font-medium text-gray-400">Category</th>
+              <th className="text-right py-2 text-xs font-medium text-gray-400">Total</th>
+              <th className="text-right py-2 text-xs font-medium text-gray-400">Avg/month</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-50">
+            {categories.map(cat => (
+              <tr key={cat.id}>
+                <td className="py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span>{cat.icon}</span>
+                    <span className="text-gray-700">{cat.name}</span>
+                  </div>
+                </td>
+                <td className={`py-2.5 text-right font-medium ${cat.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+                  {formatBase(cat.total)}
+                </td>
+                <td className="py-2.5 text-right text-gray-600 font-medium">
+                  {formatBase(cat.total / monthsWithData)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-gray-200">
+              <td className="py-2.5 font-semibold text-gray-700">Total</td>
+              <td className={`py-2.5 text-right font-bold ${view === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                {formatBase(total)}
+              </td>
+              <td className="py-2.5 text-right font-bold text-gray-700">
+                {formatBase(total / monthsWithData)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+function CategoryBarChart({ transactions, categories, subCategories, formatBase }) {
+  const [chartType, setChartType] = useState('expense')
+  const [selectedCategory, setSelectedCategory] = useState('')
+  const [selectedSub, setSelectedSub] = useState('')
+
+  const parentCategories = categories.filter(c => c.type === chartType && !c.parent_id)
+  const availableSubs = subCategories.filter(s => s.parent_id === selectedCategory)
+
+  // Build monthly data
+  const chartData = MONTHS.map((month, i) => {
+    let monthTx = transactions.filter(t => {
+      const d = new Date(t.date)
+      return d.getMonth() === i && t.type === chartType
+    })
+
+    if (selectedSub) {
+      monthTx = monthTx.filter(t => t.category_id === selectedSub)
+    } else if (selectedCategory) {
+      const subs = subCategories.filter(s => s.parent_id === selectedCategory).map(s => s.id)
+      monthTx = monthTx.filter(t => t.category_id === selectedCategory || subs.includes(t.category_id))
+    }
+
+    return {
+      month,
+      amount: monthTx.reduce((sum, t) => sum + Number(t.amount_base), 0)
+    }
+  })
+
+  const monthsWithData = chartData.filter(d => d.amount > 0).length || 1
+  const total = chartData.reduce((sum, d) => sum + d.amount, 0)
+  const average = total / monthsWithData
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      <h2 className="font-semibold text-gray-700 mb-4">Monthly Breakdown</h2>
+
+      {/* Filters */}
+      <div className="flex gap-2 flex-wrap mb-4">
+        {/* Type toggle */}
+        <div className="flex rounded-lg overflow-hidden border border-gray-200">
+          <button
+            onClick={() => { setChartType('expense'); setSelectedCategory(''); setSelectedSub('') }}
+            className={`px-3 py-1.5 text-sm font-medium transition ${chartType === 'expense' ? 'bg-red-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            Expenses
+          </button>
+          <button
+            onClick={() => { setChartType('income'); setSelectedCategory(''); setSelectedSub('') }}
+            className={`px-3 py-1.5 text-sm font-medium transition ${chartType === 'income' ? 'bg-green-500 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+          >
+            Income
+          </button>
+        </div>
+
+        {/* Category */}
+        <select
+          value={selectedCategory}
+          onChange={(e) => { setSelectedCategory(e.target.value); setSelectedSub('') }}
+          className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">All categories</option>
+          {parentCategories.map(c => (
+            <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+          ))}
+        </select>
+
+        {/* Subcategory */}
+        {selectedCategory && availableSubs.length > 0 && (
+          <select
+            value={selectedSub}
+            onChange={(e) => setSelectedSub(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">All subcategories</option>
+            {availableSubs.map(c => (
+              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {/* Average label */}
+      <p className="text-xs text-gray-400 mb-3">
+        Average per active month: <span className="font-semibold text-gray-600">{formatBase(average)}</span>
+        <span className="ml-2 text-gray-300">({monthsWithData} month{monthsWithData !== 1 ? 's' : ''} with data)</span>
+      </p>
+
+      <ResponsiveContainer width="100%" height={280}>
+        <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="month" tick={{ fontSize: 11 }} interval={0} />
+          <YAxis tick={{ fontSize: 11 }} />
+          <Tooltip formatter={(val) => formatBase(val)} />
+          <ReferenceLine
+            y={average}
+            stroke="#6366f1"
+            strokeDasharray="5 5"
+            strokeWidth={2}
+            label={{ value: `Avg: ${formatBase(average)}`, position: 'insideTopRight', fontSize: 11, fill: '#6366f1' }}
+          />
+          <Bar
+            dataKey="amount"
+            name={chartType === 'expense' ? 'Expenses' : 'Income'}
+            fill={chartType === 'expense' ? '#ef4444' : '#22c55e'}
+            radius={[4, 4, 0, 0]}
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+// ─── Main Analytics Component ─────────────────────────────────
 
 function Analytics({ household }) {
   const now = new Date()
   const [selectedYears, setSelectedYears] = useState([now.getFullYear()])
-  const [selectedMonth, setSelectedMonth] = useState(null) // null = all months
+  const [selectedMonths, setSelectedMonths] = useState([])
   const [transactions, setTransactions] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
-  const [expandedCategories, setExpandedCategories] = useState([])
-  const [filterCategory, setFilterCategory] = useState('')
-  const [filterSubCategory, setFilterSubCategory] = useState('')
+  const [availableYears, setAvailableYears] = useState([now.getFullYear()])
 
-  const availableYears = Array.from(
-    { length: 5 },
-    (_, i) => now.getFullYear() - i
-  )
+  useEffect(() => {
+    const fetchYears = async () => {
+      const { data } = await supabase
+        .from('transactions')
+        .select('date')
+        .eq('household_id', household.id)
+
+      if (data) {
+        const years = [...new Set(data.map(t => new Date(t.date).getFullYear()))].sort((a, b) => b - a)
+        if (years.length > 0) {
+          setAvailableYears(years)
+          setSelectedYears([years[0]])
+        }
+      }
+    }
+    fetchYears()
+  }, [household.id])
 
   useEffect(() => {
     fetchData()
-  }, [household.id, selectedYears, selectedMonth])
+  }, [household.id, selectedYears, selectedMonths])
 
   const fetchData = async () => {
     setLoading(true)
@@ -33,30 +551,20 @@ function Analytics({ household }) {
     const minYear = Math.min(...selectedYears)
     const maxYear = Math.max(...selectedYears)
 
-    let startDate = `${minYear}-01-01`
-    let endDate = `${maxYear}-12-31`
+    const { data: txData } = await supabase
+      .from('transactions')
+      .select('*, categories(name, icon, color, parent_id)')
+      .eq('household_id', household.id)
+      .gte('date', `${minYear}-01-01`)
+      .lte('date', `${maxYear}-12-31`)
+      .order('date', { ascending: false })
 
-    if (selectedMonth !== null && selectedYears.length === 1) {
-      const lastDay = new Date(selectedYears[0], selectedMonth + 1, 0)
-      startDate = `${selectedYears[0]}-${String(selectedMonth + 1).padStart(2, '0')}-01`
-      endDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-    }
-
-    const [{ data: txData }, { data: catData }] = await Promise.all([
-      supabase
-        .from('transactions')
-        .select('*, categories(name, icon, color, parent_id)')
-        .eq('household_id', household.id)
-        .gte('date', startDate)
-        .lte('date', endDate)
-        .order('date', { ascending: false }),
-      supabase
-        .from('categories')
-        .select('id, name, icon, color, parent_id, type')
-        .eq('household_id', household.id)
-        .eq('is_active', true)
-        .order('sort_order')
-    ])
+    const { data: catData } = await supabase
+      .from('categories')
+      .select('id, name, icon, color, parent_id, type')
+      .eq('household_id', household.id)
+      .eq('is_active', true)
+      .order('sort_order')
 
     if (txData) setTransactions(txData)
     if (catData) setCategories(catData)
@@ -71,9 +579,9 @@ function Analytics({ household }) {
     )
   }
 
-  const toggleExpandCategory = (id) => {
-    setExpandedCategories(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+  const toggleMonth = (i) => {
+    setSelectedMonths(prev =>
+      prev.includes(i) ? prev.filter(m => m !== i) : [...prev, i]
     )
   }
 
@@ -86,47 +594,30 @@ function Analytics({ household }) {
     day: 'numeric', month: 'short', year: 'numeric'
   })
 
-  // Filter transactions by selected years
+  // Filter transactions
   const filteredTx = transactions.filter(t => {
-    const year = new Date(t.date).getFullYear()
-    return selectedYears.includes(year)
+    const d = new Date(t.date)
+    if (!selectedYears.includes(d.getFullYear())) return false
+    if (selectedMonths.length > 0 && !selectedMonths.includes(d.getMonth())) return false
+    return true
   })
 
   const expenses = filteredTx.filter(t => t.type === 'expense')
   const income = filteredTx.filter(t => t.type === 'income')
-
   const totalExpenses = expenses.reduce((sum, t) => sum + Number(t.amount_base), 0)
   const totalIncome = income.reduce((sum, t) => sum + Number(t.amount_base), 0)
   const netBalance = totalIncome - totalExpenses
 
-  // Monthly data for charts
-  const monthlyData = MONTHS.map((month, i) => {
-    const result = { month }
-    selectedYears.forEach(year => {
-      const monthTx = filteredTx.filter(t => {
-        const d = new Date(t.date)
-        return d.getFullYear() === year && d.getMonth() === i
-      })
-      result[`income_${year}`] = monthTx.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount_base), 0)
-      result[`expenses_${year}`] = monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount_base), 0)
-    })
-    return result
-  })
-
-  // Category breakdowns
   const parentCategories = categories.filter(c => !c.parent_id)
   const subCategories = categories.filter(c => c.parent_id)
+
+  const getSubTotal = (catId, txList) =>
+    txList.filter(t => t.category_id === catId).reduce((sum, t) => sum + Number(t.amount_base), 0)
 
   const getCategoryTotal = (catId, txList) => {
     const subs = subCategories.filter(s => s.parent_id === catId).map(s => s.id)
     return txList
       .filter(t => t.category_id === catId || subs.includes(t.category_id))
-      .reduce((sum, t) => sum + Number(t.amount_base), 0)
-  }
-
-  const getSubCategoryTotal = (catId, txList) => {
-    return txList
-      .filter(t => t.category_id === catId)
       .reduce((sum, t) => sum + Number(t.amount_base), 0)
   }
 
@@ -142,30 +633,33 @@ function Analytics({ household }) {
     .filter(c => c.total > 0)
     .sort((a, b) => b.total - a.total)
 
-  // Average monthly expenses
-  const monthsWithData = selectedYears.length * 12
-  const avgMonthlyExpense = totalExpenses / monthsWithData
+  // Subcategories with totals for breakdown
+  const subCategoriesWithTotals = subCategories.map(s => ({
+    ...s,
+    computedTotal: getSubTotal(s.id, s.type === 'expense' ? expenses : income)
+  }))
 
-  // Filtered transactions table
-  const tableExpenses = expenses.filter(t => {
-    if (filterCategory && t.category_id !== filterCategory) {
-      const subs = subCategories.filter(s => s.parent_id === filterCategory).map(s => s.id)
-      if (!subs.includes(t.category_id)) return false
-    }
-    if (filterSubCategory && t.category_id !== filterSubCategory) return false
-    return true
+  // Monthly chart data
+  const monthlyData = MONTHS.map((month, i) => {
+    const result = { month }
+    selectedYears.forEach(year => {
+      const monthTx = transactions.filter(t => {
+        const d = new Date(t.date)
+        return d.getFullYear() === year && d.getMonth() === i
+      })
+      result[`income_${year}`] = monthTx.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount_base), 0)
+      result[`expenses_${year}`] = monthTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount_base), 0)
+    })
+    return result
   })
 
-  const tableIncome = income.filter(t => {
-    if (filterCategory && t.category_id !== filterCategory) {
-      const subs = subCategories.filter(s => s.parent_id === filterCategory).map(s => s.id)
-      if (!subs.includes(t.category_id)) return false
-    }
-    if (filterSubCategory && t.category_id !== filterSubCategory) return false
-    return true
-  })
-
-  const COLORS = ['#3b82f6','#f59e0b','#ef4444','#22c55e','#8b5cf6','#06b6d4','#f97316','#ec4899']
+  const monthsWithData = new Set(
+    filteredTx.map(t => {
+        const d = new Date(t.date)
+        return `${d.getFullYear()}-${d.getMonth()}`
+    })
+    ).size || 1
+  const showCharts = selectedMonths.length === 0
 
   if (loading) return (
     <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
@@ -175,414 +669,118 @@ function Analytics({ household }) {
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Analytics</h1>
 
-      {/* Year selector */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="flex flex-wrap gap-3 items-center">
-          <div>
-            <p className="text-xs font-medium text-gray-500 mb-2">Year</p>
-            <div className="flex gap-2 flex-wrap">
-              {availableYears.map(year => (
-                <button
-                  key={year}
-                  onClick={() => toggleYear(year)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                    selectedYears.includes(year)
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {year}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {selectedYears.length === 1 && (
-            <div className="ml-auto">
-              <p className="text-xs font-medium text-gray-500 mb-2">Month</p>
-              <div className="flex gap-1 flex-wrap">
-                <button
-                  onClick={() => setSelectedMonth(null)}
-                  className={`px-2 py-1 rounded-lg text-xs font-medium transition ${
-                    selectedMonth === null ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  All
-                </button>
-                {MONTHS.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setSelectedMonth(selectedMonth === i ? null : i)}
-                    className={`px-2 py-1 rounded-lg text-xs font-medium transition ${
-                      selectedMonth === i ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Income</p>
-          <p className="text-lg font-bold text-green-500">{formatBase(totalIncome)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Expenses</p>
-          <p className="text-lg font-bold text-red-500">{formatBase(totalExpenses)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Net</p>
-          <p className={`text-lg font-bold ${netBalance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {netBalance >= 0 ? '+' : ''}{formatBase(netBalance)}
-          </p>
-        </div>
-      </div>
-
-      {/* Bar chart — hidden when specific month selected */}
-      {selectedMonth === null && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-700 mb-4">Monthly Income vs Expenses</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={monthlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(val) => formatBase(val)} />
-              <Legend />
-              {selectedYears.map((year, i) => (
-                <>
-                  <Bar key={`income_${year}`} dataKey={`income_${year}`} name={`Income ${year}`} fill="#22c55e" opacity={i === 0 ? 1 : 0.5} />
-                  <Bar key={`expenses_${year}`} dataKey={`expenses_${year}`} name={`Expenses ${year}`} fill="#ef4444" opacity={i === 0 ? 1 : 0.5} />
-                </>
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Trend line — hidden when specific month selected */}
-      {selectedMonth === null && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-700 mb-4">Monthly Trend</h2>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={monthlyData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip formatter={(val) => formatBase(val)} />
-              <Legend />
-              {selectedYears.map((year, i) => (
-                <>
-                  <Line key={`income_${year}`} type="monotone" dataKey={`income_${year}`} name={`Income ${year}`} stroke="#22c55e" strokeWidth={2} dot={false} opacity={i === 0 ? 1 : 0.5} />
-                  <Line key={`expenses_${year}`} type="monotone" dataKey={`expenses_${year}`} name={`Expenses ${year}`} stroke="#ef4444" strokeWidth={2} dot={false} opacity={i === 0 ? 1 : 0.5} />
-                </>
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Expense categories breakdown */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-700">Expenses by Category</h2>
-        </div>
-        <ul className="divide-y divide-gray-50 px-5">
-          {expenseCategories.length === 0 && (
-            <li className="py-6 text-center text-gray-400 text-sm">No expense data.</li>
-          )}
-          {expenseCategories.map((cat, i) => {
-            const isExpanded = expandedCategories.includes(cat.id)
-            const subs = subCategories
-              .filter(s => s.parent_id === cat.id)
-              .map(s => ({ ...s, total: getSubCategoryTotal(s.id, expenses) }))
-              .filter(s => s.total > 0)
-              .sort((a, b) => b.total - a.total)
-
-            return (
-              <li key={cat.id}>
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                    />
-                    <span className="text-lg">{cat.icon}</span>
-                    <span className="text-sm font-medium text-gray-800">{cat.name}</span>
-                    {subs.length > 0 && (
-                      <button
-                        onClick={() => toggleExpandCategory(cat.id)}
-                        className="text-xs text-gray-400 hover:text-gray-600"
-                      >
-                        {isExpanded ? '▼' : '▶'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-red-500">{formatBase(cat.total)}</p>
-                    <p className="text-xs text-gray-400">
-                      {totalExpenses > 0 ? Math.round((cat.total / totalExpenses) * 100) : 0}% of expenses
-                    </p>
-                  </div>
-                </div>
-                {isExpanded && subs.map(sub => (
-                  <div key={sub.id} className="flex items-center justify-between py-2 pl-10 border-t border-gray-50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{sub.icon}</span>
-                      <span className="text-sm text-gray-600">{sub.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-700">{formatBase(sub.total)}</p>
-                      <p className="text-xs text-gray-400">
-                        {totalExpenses > 0 ? Math.round((sub.total / totalExpenses) * 100) : 0}% of expenses
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </li>
-            )
-          })}
-        </ul>
-      </div>
-
-      {/* Income categories breakdown */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-700">Income by Category</h2>
-        </div>
-        <ul className="divide-y divide-gray-50 px-5">
-          {incomeCategories.length === 0 && (
-            <li className="py-6 text-center text-gray-400 text-sm">No income data.</li>
-          )}
-          {incomeCategories.map((cat, i) => {
-            const isExpanded = expandedCategories.includes(`inc_${cat.id}`)
-            const subs = subCategories
-              .filter(s => s.parent_id === cat.id)
-              .map(s => ({ ...s, total: getSubCategoryTotal(s.id, income) }))
-              .filter(s => s.total > 0)
-              .sort((a, b) => b.total - a.total)
-
-            return (
-              <li key={cat.id}>
-                <div className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                    />
-                    <span className="text-lg">{cat.icon}</span>
-                    <span className="text-sm font-medium text-gray-800">{cat.name}</span>
-                    {subs.length > 0 && (
-                      <button
-                        onClick={() => toggleExpandCategory(`inc_${cat.id}`)}
-                        className="text-xs text-gray-400 hover:text-gray-600"
-                      >
-                        {isExpanded ? '▼' : '▶'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-semibold text-green-500">{formatBase(cat.total)}</p>
-                    <p className="text-xs text-gray-400">
-                      {totalIncome > 0 ? Math.round((cat.total / totalIncome) * 100) : 0}% of income
-                    </p>
-                  </div>
-                </div>
-                {isExpanded && subs.map(sub => (
-                  <div key={sub.id} className="flex items-center justify-between py-2 pl-10 border-t border-gray-50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">{sub.icon}</span>
-                      <span className="text-sm text-gray-600">{sub.name}</span>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-medium text-gray-700">{formatBase(sub.total)}</p>
-                      <p className="text-xs text-gray-400">
-                        {totalIncome > 0 ? Math.round((sub.total / totalIncome) * 100) : 0}% of income
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </li>
-            )
-          })}
-        </ul>
-      </div>
-
-      {/* Averages */}
-      {selectedMonth === null && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-700 mb-4">Monthly Averages</h2>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-1">Avg monthly expenses</p>
-              <p className="text-lg font-bold text-red-500">{formatBase(avgMonthlyExpense)}</p>
-            </div>
-            <div className="bg-gray-50 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-1">Avg monthly income</p>
-              <p className="text-lg font-bold text-green-500">{formatBase(totalIncome / monthsWithData)}</p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            {expenseCategories.map(cat => {
-              const avg = cat.total / monthsWithData
-              return (
-                <div key={cat.id} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span>{cat.icon}</span>
-                    <span className="text-sm text-gray-700">{cat.name}</span>
-                  </div>
-                  <span className="text-sm font-medium text-gray-600">{formatBase(avg)}/mo</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Transactions table filter */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <h2 className="font-semibold text-gray-700 mb-3">Filter Transactions</h2>
-        <div className="flex gap-2 flex-wrap">
-          <select
-            value={filterCategory}
-            onChange={(e) => { setFilterCategory(e.target.value); setFilterSubCategory('') }}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">All categories</option>
-            {parentCategories.map(c => (
-              <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
+      {/* Filter bar */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 space-y-3">
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-2">Year</p>
+          <div className="flex gap-2 flex-wrap">
+            {availableYears.map(year => (
+              <button
+                key={year}
+                onClick={() => toggleYear(year)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+                  selectedYears.includes(year)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {year}
+              </button>
             ))}
-          </select>
-          {filterCategory && subCategories.filter(s => s.parent_id === filterCategory).length > 0 && (
-            <select
-              value={filterSubCategory}
-              onChange={(e) => setFilterSubCategory(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All subcategories</option>
-              {subCategories.filter(s => s.parent_id === filterCategory).map(c => (
-                <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-              ))}
-            </select>
-          )}
-          {(filterCategory || filterSubCategory) && (
-            <button
-              onClick={() => { setFilterCategory(''); setFilterSubCategory('') }}
-              className="text-xs text-red-500 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-50 transition"
-            >
-              Clear
-            </button>
-          )}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-medium text-gray-500 mb-2">
+            Month
+            {selectedMonths.length > 0 && (
+              <button onClick={() => setSelectedMonths([])} className="ml-2 text-blue-600 hover:underline font-normal">
+                Clear
+              </button>
+            )}
+          </p>
+          <div className="flex gap-1 flex-wrap">
+            {MONTHS.map((m, i) => (
+              <button
+                key={i}
+                onClick={() => toggleMonth(i)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                  selectedMonths.includes(i)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Expenses table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-700">Expenses</h2>
-          <span className="text-xs text-gray-400">{tableExpenses.length} transactions</span>
-        </div>
-        {tableExpenses.length === 0 ? (
-          <div className="px-5 py-6 text-center text-gray-400 text-sm">No expenses found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Date</th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Description</th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Category</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Amount</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">% of total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {tableExpenses.map(t => (
-                  <tr key={t.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
-                    <td className="px-5 py-3 text-gray-700">{t.description || '—'}</td>
-                    <td className="px-5 py-3 text-gray-500">
-                      {t.categories?.icon} {t.categories?.name || 'Uncategorised'}
-                    </td>
-                    <td className="px-5 py-3 text-right font-medium text-red-500">
-                      -{formatBase(t.amount_base)}
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-400">
-                      {totalExpenses > 0 ? Math.round((Number(t.amount_base) / totalExpenses) * 100) : 0}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-gray-200">
-                  <td colSpan={3} className="px-5 py-3 text-sm font-semibold text-gray-700">Total</td>
-                  <td className="px-5 py-3 text-right font-bold text-red-500">
-                    -{formatBase(tableExpenses.reduce((sum, t) => sum + Number(t.amount_base), 0))}
-                  </td>
-                  <td className="px-5 py-3 text-right text-gray-400">100%</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
+      <SummaryCards
+        totalIncome={totalIncome}
+        totalExpenses={totalExpenses}
+        netBalance={netBalance}
+        formatBase={formatBase}
+      />
 
-      {/* Income table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="font-semibold text-gray-700">Income</h2>
-          <span className="text-xs text-gray-400">{tableIncome.length} transactions</span>
-        </div>
-        {tableIncome.length === 0 ? (
-          <div className="px-5 py-6 text-center text-gray-400 text-sm">No income found.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Date</th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Description</th>
-                  <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Category</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Amount</th>
-                  <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">% of total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {tableIncome.map(t => (
-                  <tr key={t.id} className="hover:bg-gray-50">
-                    <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
-                    <td className="px-5 py-3 text-gray-700">{t.description || '—'}</td>
-                    <td className="px-5 py-3 text-gray-500">
-                      {t.categories?.icon} {t.categories?.name || 'Uncategorised'}
-                    </td>
-                    <td className="px-5 py-3 text-right font-medium text-green-500">
-                      +{formatBase(t.amount_base)}
-                    </td>
-                    <td className="px-5 py-3 text-right text-gray-400">
-                      {totalIncome > 0 ? Math.round((Number(t.amount_base) / totalIncome) * 100) : 0}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-gray-200">
-                  <td colSpan={3} className="px-5 py-3 text-sm font-semibold text-gray-700">Total</td>
-                  <td className="px-5 py-3 text-right font-bold text-green-500">
-                    +{formatBase(tableIncome.reduce((sum, t) => sum + Number(t.amount_base), 0))}
-                  </td>
-                  <td className="px-5 py-3 text-right text-gray-400">100%</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+      {showCharts && (
+        <BarChartSection
+          monthlyData={monthlyData}
+          selectedYears={selectedYears}
+          formatBase={formatBase}
+        />
+      )}
+
+      {showCharts && (
+        <TrendLineSection
+          monthlyData={monthlyData}
+          selectedYears={selectedYears}
+          formatBase={formatBase}
+        />
+      )}
+
+        <CategoryBreakdown
+        title="Expenses by Category"
+        categoriesData={expenseCategories}
+        subCategories={subCategoriesWithTotals}
+        transactions={expenses}
+        totalExpenses={totalExpenses}
+        totalIncome={totalIncome}
+        type="expense"
+        formatBase={formatBase}
+        formatDate={formatDate}
+        />
+
+        <CategoryBreakdown
+        title="Income by Category"
+        categoriesData={incomeCategories}
+        subCategories={subCategoriesWithTotals}
+        transactions={income}
+        totalExpenses={totalExpenses}
+        totalIncome={totalIncome}
+        type="income"
+        formatBase={formatBase}
+        formatDate={formatDate}
+        />
+
+        {showCharts && (
+        <MonthlyAverages
+            expenseCategories={expenseCategories}
+            incomeCategories={incomeCategories}
+            totalExpenses={totalExpenses}
+            totalIncome={totalIncome}
+            monthsWithData={monthsWithData}
+            formatBase={formatBase}
+        />
         )}
-      </div>
+
+      <CategoryBarChart
+        transactions={filteredTx}
+        categories={categories}
+        subCategories={subCategories}
+        formatBase={formatBase}
+        />
 
     </div>
   )
