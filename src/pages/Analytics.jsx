@@ -304,7 +304,7 @@ function CategoryBarChart({ transactions, categories, subCategories, formatBase 
   const average = total / monthsWithData
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 overflow-hidden">
       <h2 className="font-semibold text-gray-700 mb-4">Monthly Breakdown</h2>
       <div className="flex gap-2 flex-wrap mb-4">
         <div className="flex rounded-lg overflow-hidden border border-gray-200">
@@ -436,7 +436,7 @@ function Analytics({ household }) {
   if (loading) return <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4 w-full min-w-0 overflow-hidden">
+    <div className="max-w-2xl mx-auto space-y-4 w-full min-w-0 overflow-hidden">
       <h1 className="text-2xl font-bold text-gray-800">Analytics</h1>
 
       {/* Filter bar */}
