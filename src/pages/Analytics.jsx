@@ -659,7 +659,7 @@ function Analytics({ household }) {
         return `${d.getFullYear()}-${d.getMonth()}`
     })
     ).size || 1
-  const showCharts = selectedMonths.length === 0
+  const showCharts = true
 
   if (loading) return (
     <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
