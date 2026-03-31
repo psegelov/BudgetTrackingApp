@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToastContext } from '../context/ToastContext'
+import { useNavigate } from 'react-router-dom'
 
-function Settings({ session, household, setHousehold, profile, setProfile }) {
+function Settings({ session, household, setHousehold, profile, setProfile, households, setHouseholds, switchHousehold }) {
+  const navigate = useNavigate()
   const [members, setMembers] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
   const [inviteLink, setInviteLink] = useState(null)
@@ -16,6 +18,15 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
   const toast = useToastContext()
 
   const isOwner = members.find(m => m.user_id === session.user.id)?.role === 'owner'
+
+  // Reset form when household changes
+  useEffect(() => {
+    setHouseholdName(household?.name || '')
+    setHouseholdCurrency(household?.currency || 'ILS')
+    setInviteLink(null)
+    setPendingInvites([])
+    setMembers([])
+  }, [household?.id])
 
   useEffect(() => {
     fetchData()
@@ -52,7 +63,6 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
     if (inviteData) setPendingInvites(inviteData)
   }
 
-
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
     setSavingHousehold(true)
@@ -65,7 +75,11 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
     if (updateError) {
       toast.error(updateError.message)
     } else {
-      setHousehold({ ...household, name: householdName, currency: householdCurrency })
+      const updated = { ...household, name: householdName, currency: householdCurrency }
+      setHousehold(updated)
+      if (setHouseholds) {
+        setHouseholds(prev => prev.map(h => h.id === household.id ? updated : h))
+      }
       toast.success('Household updated.')
     }
 
@@ -138,7 +152,6 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
       toast.error("You can't remove yourself.")
       return
     }
-
     if (!window.confirm('Remove this member from the household?')) return
 
     const { error: removeError } = await supabase
@@ -151,6 +164,32 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
     } else {
       await fetchData()
       toast.success('Member removed.')
+    }
+  }
+
+  const handleDeleteHousehold = async () => {
+    if (!window.confirm(`Are you sure you want to delete "${household.name}"? All data will be permanently deleted.`)) return
+
+    const id = household.id
+
+    await supabase.from('budgets').delete().eq('household_id', id)
+    await supabase.from('recurring_templates').delete().eq('household_id', id)
+    await supabase.from('transactions').delete().eq('household_id', id)
+    await supabase.from('categories').delete().eq('household_id', id)
+    await supabase.from('household_invites').delete().eq('household_id', id)
+    await supabase.from('household_members').delete().eq('household_id', id)
+    await supabase.from('households').delete().eq('id', id)
+
+    const remaining = (households || []).filter(h => h.id !== id)
+    if (setHouseholds) setHouseholds(remaining)
+
+    if (remaining.length > 0) {
+      switchHousehold(remaining[0])
+      navigate('/dashboard')
+      toast.success('Household deleted.')
+    } else {
+      localStorage.removeItem('activeHouseholdId')
+      window.location.href = '/setup'
     }
   }
 
@@ -214,9 +253,7 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
               <option value="USD">$ USD — US Dollar</option>
               <option value="EUR">€ EUR — Euro</option>
             </select>
-            <p className="text-xs text-gray-400 mt-1">
-              All totals and charts display in this currency.
-            </p>
+            <p className="text-xs text-gray-400 mt-1">All totals and charts display in this currency.</p>
           </div>
           <button
             type="submit"
@@ -301,7 +338,6 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
           <p className="text-xs text-gray-400 mb-3">
             Generate a link and share it — anyone with the link can join your household.
           </p>
-
           {!inviteLink ? (
             <button
               onClick={handleGenerateInvite}
@@ -332,6 +368,21 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
         </div>
       </div>
 
+      {/* Danger zone */}
+      {isOwner && (
+        <div className="bg-white rounded-xl shadow-sm border border-red-100 p-6">
+          <h2 className="font-semibold text-red-600 mb-1">Danger Zone</h2>
+          <p className="text-xs text-gray-400 mb-4">
+            Deleting this household will permanently remove all transactions, categories, budgets and recurring templates. This cannot be undone.
+          </p>
+          <button
+            onClick={handleDeleteHousehold}
+            className="border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium px-4 py-2 rounded-lg transition"
+          >
+            Delete household
+          </button>
+        </div>
+      )}
     </div>
   )
 }
