@@ -22,22 +22,36 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
   }, [household.id, session.user.id])
 
   const fetchData = async () => {
-    const [{ data: memberData }, { data: inviteData }] = await Promise.all([
-      supabase
-        .from('household_members')
-        .select('id, role, joined_at, user_id, profiles(full_name)')
-        .eq('household_id', household.id),
-      supabase
-        .from('household_invites')
-        .select('id, invite_token, email, created_at, expires_at')
-        .eq('household_id', household.id)
-        .eq('status', 'pending')
-        .gt('expires_at', new Date().toISOString())
-    ])
+    const { data: memberData } = await supabase
+      .from('household_members')
+      .select('id, role, joined_at, user_id')
+      .eq('household_id', household.id)
 
-    if (memberData) setMembers(memberData)
+    if (memberData) {
+      const userIds = memberData.map(m => m.user_id)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds)
+
+      const membersWithProfiles = memberData.map(m => ({
+        ...m,
+        profiles: profileData?.find(p => p.id === m.user_id) || null
+      }))
+
+      setMembers(membersWithProfiles)
+    }
+
+    const { data: inviteData } = await supabase
+      .from('household_invites')
+      .select('id, invite_token, email, created_at, expires_at')
+      .eq('household_id', household.id)
+      .eq('status', 'pending')
+      .gt('expires_at', new Date().toISOString())
+
     if (inviteData) setPendingInvites(inviteData)
   }
+
 
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
