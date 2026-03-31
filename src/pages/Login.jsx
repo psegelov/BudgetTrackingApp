@@ -74,15 +74,18 @@ function Login() {
     }
 
     // After successful login - force reload so App.jsx re-runs init()
-    const storedToken = localStorage.getItem('pendingInviteToken')
-    if (storedToken) {
-      localStorage.removeItem('pendingInviteToken')
-      window.location.href = `/join/${storedToken}`
-    } else if (inviteToken) {
-      window.location.href = `/join/${inviteToken}`
-    } else {
-      window.location.href = '/dashboard'
-    }
+  const storedToken = localStorage.getItem('pendingInviteToken')
+  if (storedToken) {
+    localStorage.removeItem('pendingInviteToken')
+    await new Promise(resolve => setTimeout(resolve, 100))
+    window.location.href = `/join/${storedToken}`
+  } else if (inviteToken) {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    window.location.href = `/join/${inviteToken}`
+  } else {
+    await new Promise(resolve => setTimeout(resolve, 100))
+    window.location.href = '/dashboard'
+  }
 
   }
 
