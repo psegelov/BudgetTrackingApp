@@ -96,11 +96,62 @@ function Transactions({ household }) {
     setShowCategoryDropdown(false); setStartDate(''); setEndDate(''); setSortBy('date_desc'); setSearch('')
   }
 
+  const handleExportCSV = () => {
+    if (filtered.length === 0) return
+
+    const headers = ['Date', 'Type', 'Category', 'Subcategory', 'Description', 'Amount', 'Currency', 'Amount (Base)']
+
+    const rows = filtered.map(t => {
+      const isSubCat = t.categories?.parent_id
+      const parentCat = isSubCat ? categories.find(c => c.id === t.categories?.parent_id) : null
+      const categoryName = parentCat?.name || t.categories?.name || 'Uncategorised'
+      const subCategoryName = isSubCat ? t.categories?.name : ''
+
+      return [
+        new Date(t.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+        t.type,
+        categoryName,
+        subCategoryName,
+        t.description || '',
+        t.amount,
+        t.currency,
+        t.amount_base
+      ]
+    })
+
+    const csvContent = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `transactions-${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Transactions</h1>
-        <button onClick={() => navigate('/add')} className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">+ Add</button>
+        <div className="flex gap-2">
+          {filtered.length > 0 && (
+            <button
+              onClick={handleExportCSV}
+              className="border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg transition"
+            >
+              Export CSV
+            </button>
+          )}
+          <button
+            onClick={() => navigate('/add')}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+          >
+            + Add
+          </button>
+        </div>
       </div>
 
       <div className="mb-3">
