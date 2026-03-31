@@ -21,9 +21,10 @@ const bottomNavItems = [
   { path: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-function Layout({ children, household, setHousehold }) {
+function Layout({ children, household, setHousehold, households, switchHousehold }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [householdMenuOpen, setHouseholdMenuOpen] = useState(false)
   const { toasts, toast } = useToast()
 
   const handleSignOut = async () => {
@@ -33,14 +34,47 @@ function Layout({ children, household, setHousehold }) {
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">💰</span>
-          <div>
-            <p className="font-bold text-gray-800 text-sm leading-tight">Budget App</p>
-            <p className="text-xs text-gray-400 truncate max-w-[140px]">{household?.name}</p>
-          </div>
+      {/* Household switcher */}
+      <div className="px-3 py-4 border-b border-gray-100">
+        <div className="relative">
+          <button
+            onClick={() => setHouseholdMenuOpen(!householdMenuOpen)}
+            className="w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-gray-50 transition"
+          >
+            <span className="text-2xl">💰</span>
+            <div className="flex-1 text-left min-w-0">
+              <p className="font-bold text-gray-800 text-sm leading-tight truncate">{household?.name}</p>
+              <p className="text-xs text-gray-400">Switch household</p>
+            </div>
+            <span className="text-gray-400 text-xs">{householdMenuOpen ? '▲' : '▼'}</span>
+          </button>
+
+          {householdMenuOpen && (
+            <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-1 overflow-hidden">
+              {households?.map(h => (
+                <button
+                  key={h.id}
+                  onClick={() => { switchHousehold(h); setHouseholdMenuOpen(false); setSidebarOpen(false) }}
+                  className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left hover:bg-gray-50 transition ${
+                    h.id === household?.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                  }`}
+                >
+                  <span>🏠</span>
+                  <span className="truncate">{h.name}</span>
+                  {h.id === household?.id && <span className="ml-auto text-xs">✓</span>}
+                </button>
+              ))}
+              <div className="border-t border-gray-100">
+                <button
+                  onClick={() => { setHouseholdMenuOpen(false); setSidebarOpen(false); navigate('/setup') }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 transition"
+                >
+                  <span>➕</span>
+                  <span>Create new household</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -53,9 +87,7 @@ function Layout({ children, household, setHousehold }) {
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-                isActive
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
               }`
             }
           >
@@ -72,9 +104,7 @@ function Layout({ children, household, setHousehold }) {
           onClick={() => setSidebarOpen(false)}
           className={({ isActive }) =>
             `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-              isActive
-                ? 'bg-blue-50 text-blue-600'
-                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+              isActive ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
             }`
           }
         >
@@ -102,10 +132,7 @@ function Layout({ children, household, setHousehold }) {
 
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
+        <div className="fixed inset-0 bg-black bg-opacity-30 z-20 md:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
       {/* Mobile sidebar */}
@@ -120,22 +147,52 @@ function Layout({ children, household, setHousehold }) {
 
         {/* Mobile topbar */}
         <div className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="text-gray-600 hover:text-gray-800 transition text-xl"
-          >
-            ☰
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-lg">💰</span>
-            <span className="font-semibold text-gray-800 text-sm">{household?.name}</span>
+          <button onClick={() => setSidebarOpen(true)} className="text-gray-600 hover:text-gray-800 transition text-xl">☰</button>
+
+          <div className="relative">
+            <button
+              onClick={() => setHouseholdMenuOpen(!householdMenuOpen)}
+              className="flex items-center gap-1.5"
+            >
+              <span className="text-lg">💰</span>
+              <span className="font-semibold text-gray-800 text-sm">{household?.name}</span>
+              <span className="text-gray-400 text-xs">{householdMenuOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {householdMenuOpen && (
+              <div className="absolute top-full left-1/2 -translate-x-1/2 bg-white border border-gray-200 rounded-lg shadow-lg z-50 mt-2 w-48 overflow-hidden">
+                {households?.map(h => (
+                  <button
+                    key={h.id}
+                    onClick={() => { switchHousehold(h); setHouseholdMenuOpen(false) }}
+                    className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left hover:bg-gray-50 transition ${
+                      h.id === household?.id ? 'bg-blue-50 text-blue-600 font-medium' : 'text-gray-700'
+                    }`}
+                  >
+                    <span>🏠</span>
+                    <span className="truncate">{h.name}</span>
+                    {h.id === household?.id && <span className="ml-auto text-xs">✓</span>}
+                  </button>
+                ))}
+                <div className="border-t border-gray-100">
+                  <button
+                    onClick={() => { setHouseholdMenuOpen(false); navigate('/setup') }}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-blue-600 hover:bg-blue-50 transition"
+                  >
+                    <span>➕</span>
+                    <span>New household</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
           <div className="w-6" />
         </div>
 
-        {/* Page content — add bottom padding on mobile for tab bar */}
+        {/* Page content */}
         <ToastContext.Provider value={toast}>
-          <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6 overflow-hidden">
+          <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
             {children}
           </main>
         </ToastContext.Provider>
@@ -149,19 +206,19 @@ function Layout({ children, household, setHousehold }) {
               key={item.path}
               to={item.path}
               className={({ isActive }) =>
-                `flex-1 flex flex-col items-center justify-center py-3 gap-1 transition ${
+                `flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition ${
                   isActive ? 'text-blue-600' : 'text-gray-400'
                 }`
               }
             >
-              <span className="text-xl">{item.icon}</span>
+              <span className="text-lg">{item.icon}</span>
               <span className="text-xs font-medium">{item.label}</span>
             </NavLink>
           ))}
         </div>
       </nav>
 
-        <Toast toasts={toasts} />
+      <Toast toasts={toasts} />
     </div>
   )
 }
