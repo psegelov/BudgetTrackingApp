@@ -8,6 +8,7 @@ import { ToastContext } from '../context/ToastContext'
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
   { path: '/transactions', label: 'Transactions', icon: '📋' },
+  { path: '/analytics', label: 'Analytics', icon: '📈' },
   { path: '/add', label: 'Add Transaction', icon: '➕' },
   { path: '/categories', label: 'Categories', icon: '🏷️' },
   { path: '/recurring', label: 'Recurring', icon: '🔄' },
