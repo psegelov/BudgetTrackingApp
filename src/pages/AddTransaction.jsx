@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import { getExchangeRate } from '../lib/exchangeRates'
+import { useToastContext } from '../context/ToastContext'
 
 function AddTransaction({ session, household }) {
   const navigate = useNavigate()
@@ -9,6 +10,7 @@ function AddTransaction({ session, household }) {
   const [error, setError] = useState(null)
   const [categories, setCategories] = useState([])
   const [liveRate, setLiveRate] = useState(null)
+  const toast = useToastContext()
 
   const today = new Date()
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -106,6 +108,7 @@ function AddTransaction({ session, household }) {
       return
     }
 
+    toast.success('Transaction saved.')
     navigate('/dashboard')
   }
 

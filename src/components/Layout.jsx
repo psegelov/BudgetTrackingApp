@@ -1,6 +1,9 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import Toast from './Toast'
+import { useToast } from '../hooks/useToast'
+import { ToastContext } from '../context/ToastContext'
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '📊' },
@@ -20,6 +23,7 @@ const bottomNavItems = [
 function Layout({ children, household, setHousehold }) {
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { toasts, toast } = useToast()
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -129,9 +133,11 @@ function Layout({ children, household, setHousehold }) {
         </div>
 
         {/* Page content — add bottom padding on mobile for tab bar */}
-        <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
-          {children}
-        </main>
+        <ToastContext.Provider value={toast}>
+          <main className="max-w-4xl mx-auto px-4 py-6 pb-24 md:pb-6">
+            {children}
+          </main>
+        </ToastContext.Provider>
       </div>
 
       {/* Mobile bottom tab bar */}
@@ -154,6 +160,7 @@ function Layout({ children, household, setHousehold }) {
         </div>
       </nav>
 
+        <Toast toasts={toasts} />
     </div>
   )
 }

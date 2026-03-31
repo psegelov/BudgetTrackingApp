@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useToastContext } from '../context/ToastContext'
 
 const ICONS = ['🏠','🛒','🚗','💡','🍽️','🏥','🎬','📚','👕','📦','💰','💻','📈','💵','⛽','🚌','🅿️','🛡️','⚡','💧','📡','📱','🔥','🏪','🥦','💊','🏦','🏛️','🔧','🎁','💼','🎯','✈️','🏋️','🐾','🎵','🍕','☕','🛍️','💈','🚙','🏛️']
 
@@ -13,6 +14,7 @@ function Categories({ household }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [collapsed, setCollapsed] = useState({})
+  const toast = useToastContext()
 
   const toggleCollapse = (id) => {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
@@ -108,6 +110,7 @@ function Categories({ household }) {
 
     await fetchCategories()
     setShowForm(false)
+    toast.success(editingCategory ? 'Category updated.' : 'Category added.')
     setEditingCategory(null)
     setSaving(false)
   }
@@ -154,6 +157,7 @@ function Categories({ household }) {
 
     await fetchCategories()
     setShowForm(false)
+    toast.success('Category deleted.')
     setEditingCategory(null)
     setDeleting(false)
   }

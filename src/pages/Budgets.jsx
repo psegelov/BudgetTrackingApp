@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useToastContext } from '../context/ToastContext'
 
 function Budgets({ household }) {
   const [budgets, setBudgets] = useState([])
@@ -10,6 +11,7 @@ function Budgets({ household }) {
   const [editingBudget, setEditingBudget] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const toast = useToastContext()
 
   const now = new Date()
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
@@ -166,6 +168,7 @@ function Budgets({ household }) {
 
     await fetchData()
     setShowForm(false)
+    toast.success(editingBudget ? 'Budget updated.' : 'Budget set.')
     setEditingBudget(null)
     setSaving(false)
   }
@@ -181,6 +184,7 @@ function Budgets({ household }) {
 
     await fetchData()
     setShowForm(false)
+    toast.success('Budget deleted.')
     setEditingBudget(null)
   }
 

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useToastContext } from '../context/ToastContext'
+
 
 function Recurring({ session, household }) {
   const [templates, setTemplates] = useState([])
@@ -10,6 +12,7 @@ function Recurring({ session, household }) {
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState(null)
+  const toast = useToastContext()
 
   const today = new Date().toISOString().split('T')[0]
 
@@ -150,6 +153,7 @@ function Recurring({ session, household }) {
 
     await fetchData()
     setShowForm(false)
+    toast.success(editingTemplate ? 'Recurring updated.' : 'Recurring added.')
     setEditingTemplate(null)
     setSaving(false)
   }
@@ -168,6 +172,7 @@ function Recurring({ session, household }) {
 
     await fetchData()
     setShowForm(false)
+    toast.success('Recurring deleted.')
     setEditingTemplate(null)
     setDeleting(false)
   }

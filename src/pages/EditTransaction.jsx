@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getExchangeRate } from '../lib/exchangeRates'
+import { useToastContext } from '../context/ToastContext'
 
 function EditTransaction({ session, household }) {
   const navigate = useNavigate()
@@ -13,6 +14,7 @@ function EditTransaction({ session, household }) {
   const [categories, setCategories] = useState([])
   const [form, setForm] = useState(null)
   const [liveRate, setLiveRate] = useState(null)
+  const toast = useToastContext()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -131,6 +133,7 @@ function EditTransaction({ session, household }) {
       return
     }
 
+    toast.success('Transaction updated.')
     navigate('/dashboard')
   }
 
@@ -149,6 +152,7 @@ function EditTransaction({ session, household }) {
       return
     }
 
+    toast.success('Transaction deleted.')
     navigate('/dashboard')
   }
 

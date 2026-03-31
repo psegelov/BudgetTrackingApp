@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { useToastContext } from '../context/ToastContext'
 
 function Settings({ session, household, setHousehold, profile, setProfile }) {
   const [members, setMembers] = useState([])
@@ -12,8 +13,7 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
   const [savingProfile, setSavingProfile] = useState(false)
   const [generatingInvite, setGeneratingInvite] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [error, setError] = useState(null)
-  const [success, setSuccess] = useState(null)
+  const toast = useToastContext()
 
   const isOwner = members.find(m => m.user_id === session.user.id)?.role === 'owner'
 
@@ -39,15 +39,9 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
     if (inviteData) setPendingInvites(inviteData)
   }
 
-  const showSuccess = (msg) => {
-    setSuccess(msg)
-    setTimeout(() => setSuccess(null), 3000)
-  }
-
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
     setSavingHousehold(true)
-    setError(null)
 
     const { error: updateError } = await supabase
       .from('households')
@@ -55,10 +49,10 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
       .eq('id', household.id)
 
     if (updateError) {
-      setError(updateError.message)
+      toast.error(updateError.message)
     } else {
       setHousehold({ ...household, name: householdName, currency: householdCurrency })
-      showSuccess('Household updated.')
+      toast.success('Household updated.')
     }
 
     setSavingHousehold(false)
@@ -67,17 +61,16 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
   const handleSaveProfile = async (e) => {
     e.preventDefault()
     setSavingProfile(true)
-    setError(null)
 
     const { error: updateError } = await supabase
       .from('profiles')
       .upsert({ id: session.user.id, full_name: fullName })
 
     if (updateError) {
-      setError(updateError.message)
+      toast.error(updateError.message)
     } else {
       setProfile({ ...profile, full_name: fullName })
-      showSuccess('Profile saved.')
+      toast.success('Profile saved.')
     }
 
     setSavingProfile(false)
@@ -85,7 +78,6 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
 
   const handleGenerateInvite = async () => {
     setGeneratingInvite(true)
-    setError(null)
 
     const existing = pendingInvites[0]
     if (existing) {
@@ -101,7 +93,7 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
       .single()
 
     if (inviteError) {
-      setError(inviteError.message)
+      toast.error(inviteError.message)
     } else {
       setInviteLink(`${window.location.origin}/join/${invite.invite_token}`)
       await fetchData()
@@ -118,7 +110,7 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
 
     setInviteLink(null)
     await fetchData()
-    showSuccess('Invite cancelled.')
+    toast.success('Invite cancelled.')
   }
 
   const handleCopy = () => {
@@ -129,7 +121,7 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
 
   const handleRemoveMember = async (memberId, memberUserId) => {
     if (memberUserId === session.user.id) {
-      setError("You can't remove yourself.")
+      toast.error("You can't remove yourself.")
       return
     }
 
@@ -141,24 +133,16 @@ function Settings({ session, household, setHousehold, profile, setProfile }) {
       .eq('id', memberId)
 
     if (removeError) {
-      setError(removeError.message)
+      toast.error(removeError.message)
     } else {
       await fetchData()
-      showSuccess('Member removed.')
+      toast.success('Member removed.')
     }
   }
 
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
-
-      {error && (
-        <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
-      )}
-
-      {success && (
-        <p className="text-sm text-green-600 bg-green-50 px-3 py-2 rounded-lg">{success}</p>
-      )}
 
       {/* Profile */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
