@@ -16,6 +16,7 @@ import Budgets from './pages/Budgets'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Transactions from './pages/Transactions'
+import Analytics from './pages/Analytics'
 
 function App() {
   const [session, setSession] = useState(undefined)
@@ -178,6 +179,16 @@ if (session === undefined || household === undefined || profile === undefined) r
           !household ? <Navigate to="/setup" /> :
           <Layout household={household} setHousehold={setHousehold}>
             <Transactions household={household} />
+          </Layout>
+        }
+      />
+      <Route
+        path="/analytics"
+        element={
+          !session ? <Navigate to="/login" /> :
+          !household ? <Navigate to="/setup" /> :
+          <Layout household={household} setHousehold={setHousehold}>
+            <Analytics household={household} />
           </Layout>
         }
       />
