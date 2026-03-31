@@ -54,20 +54,46 @@ useEffect(() => {
 
   init()
 
-const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_OUT') {
-    setSession(null)
-    setHousehold(null)
-  } else if (event === 'SIGNED_IN') {
-    // Check for pending invite token
-    const pendingToken = localStorage.getItem('pendingInviteToken')
-    if (pendingToken) {
-      localStorage.removeItem('pendingInviteToken')
-      window.location.href = `/join/${pendingToken}`
+const { data: { subscription } } = supabase.auth.onAuthStateChange(
+  async (event, session) => {
+    console.log('Auth event:', event)
+
+    // ✅ ALWAYS update session first
+    setSession(session ?? null)
+
+    if (event === 'SIGNED_OUT') {
+      setHousehold(null)
+      setProfile(null)
       return
     }
+
+    if (event === 'SIGNED_IN' && session?.user?.id) {
+      // ✅ Fetch user data after login
+      const { data: memberData } = await supabase
+        .from('household_members')
+        .select('household_id, households(id, name, currency)')
+        .eq('user_id', session.user.id)
+        .maybeSingle()
+
+      setHousehold(memberData?.households ?? null)
+
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', session.user.id)
+        .single()
+
+      setProfile(profileData ?? null)
+
+      // ✅ Handle invite redirect AFTER state is ready
+      const pendingToken = localStorage.getItem('pendingInviteToken')
+      if (pendingToken) {
+        localStorage.removeItem('pendingInviteToken')
+        window.location.href = `/join/${pendingToken}`
+      }
+    }
   }
-})
+)
 
   return () => subscription.unsubscribe()
 }, [])
