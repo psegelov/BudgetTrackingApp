@@ -6,11 +6,13 @@ function Toast({ toasts }) {
       {toasts.map(toast => (
         <div
           key={toast.id}
-          className={`px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-white transition-all whitespace-nowrap ${
-            toast.type === 'error' ? 'bg-red-500' :
-            toast.type === 'warning' ? 'bg-amber-500' :
-            'bg-gray-800'
-          }`}
+          className="px-4 py-3 rounded-lg text-sm font-medium text-white whitespace-nowrap"
+          style={{
+            background: toast.type === 'error' ? 'var(--red)' :
+                        toast.type === 'warning' ? 'var(--amber)' :
+                        'var(--primary)',
+            boxShadow: 'var(--shadow-md)'
+          }}
         >
           {toast.message}
         </div>

@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const Icons = {
+  chevronLeft: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>,
+  chevronRight: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>,
+  bell: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>,
+}
+
 function Dashboard({ household, session }) {
   const navigate = useNavigate()
   const [transactions, setTransactions] = useState([])
@@ -17,7 +23,6 @@ function Dashboard({ household, session }) {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true)
-
       const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
       const lastDay = new Date(selectedYear, selectedMonth + 1, 0)
       const endDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
@@ -48,63 +53,39 @@ function Dashboard({ household, session }) {
 
           for (const tmpl of autoTemplates) {
             const amount = parseFloat(tmpl.amount)
-
             await supabase.from('transactions').insert({
-              household_id: household.id,
-              category_id: tmpl.category_id,
-              created_by: session.user.id,
-              type: tmpl.type,
-              date: tmpl.next_due_date,
-              description: tmpl.description,
-              amount: amount,
-              currency: tmpl.currency,
-              exchange_rate: 1,
-              amount_base: amount,
-              is_recurring: true,
-              recurring_id: tmpl.id
+              household_id: household.id, category_id: tmpl.category_id,
+              created_by: session.user.id, type: tmpl.type, date: tmpl.next_due_date,
+              description: tmpl.description, amount, currency: tmpl.currency,
+              exchange_rate: 1, amount_base: amount, is_recurring: true, recurring_id: tmpl.id
             })
-
             const next = new Date(tmpl.next_due_date)
             if (tmpl.frequency === 'weekly') next.setDate(next.getDate() + 7)
             else if (tmpl.frequency === 'biweekly') next.setDate(next.getDate() + 14)
             else if (tmpl.frequency === 'monthly') next.setMonth(next.getMonth() + 1)
             else if (tmpl.frequency === 'yearly') next.setFullYear(next.getFullYear() + 1)
-
             const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
-
-            await supabase
-              .from('recurring_templates')
-              .update({ next_due_date: nextStr })
-              .eq('id', tmpl.id)
+            await supabase.from('recurring_templates').update({ next_due_date: nextStr }).eq('id', tmpl.id)
           }
-
           setDueTemplates(manualTemplates)
         }
       } else {
         setDueTemplates([])
       }
-
       setLoading(false)
     }
-
     fetchData()
   }, [household.id, selectedMonth, selectedYear])
 
-  const totalIncome = transactions
-    .filter(t => t.type === 'income')
-    .reduce((sum, t) => sum + Number(t.amount_base), 0)
-
-  const totalExpenses = transactions
-    .filter(t => t.type === 'expense')
-    .reduce((sum, t) => sum + Number(t.amount_base), 0)
-
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount_base), 0)
+  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount_base), 0)
   const netBalance = totalIncome - totalExpenses
 
   const categoryTotals = transactions
     .filter(t => t.type === 'expense')
     .reduce((acc, t) => {
       const name = t.categories?.name || 'Uncategorised'
-      const icon = t.categories?.icon || '📦'
+      const icon = t.categories?.icon || null
       if (!acc[name]) acc[name] = { name, icon, total: 0 }
       acc[name].total += Number(t.amount_base)
       return acc
@@ -112,22 +93,14 @@ function Dashboard({ household, session }) {
 
   const categoryList = Object.values(categoryTotals).sort((a, b) => b.total - a.total)
 
-  const formatAmount = (amount, currency, type) => {
-    const symbol = currency === 'ILS' ? '₪' : currency === 'USD' ? '$' : '€'
-    const sign = type === 'expense' ? '-' : '+'
-    return `${sign}${symbol}${Number(amount).toLocaleString()}`
-  }
-
   const formatBase = (amount) => {
     const symbol = household.currency === 'ILS' ? '₪' : household.currency === 'USD' ? '$' : '€'
     return `${symbol}${Number(amount).toLocaleString()}`
   }
 
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    })
-  }
+  const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric'
+  })
 
   const monthName = new Date(selectedYear, selectedMonth).toLocaleDateString('en-GB', {
     month: 'long', year: 'numeric'
@@ -147,163 +120,140 @@ function Dashboard({ household, session }) {
 
   const handleConfirmRecurring = async (tmpl) => {
     const amount = parseFloat(confirmAmount) || parseFloat(tmpl.amount)
-
-    const { error: insertError } = await supabase
-      .from('transactions')
-      .insert({
-        household_id: household.id,
-        category_id: tmpl.category_id,
-        created_by: session.user.id,
-        type: tmpl.type,
-        date: tmpl.next_due_date,
-        description: tmpl.description,
-        amount: amount,
-        currency: tmpl.currency,
-        exchange_rate: 1,
-        amount_base: amount,
-        is_recurring: true,
-        recurring_id: tmpl.id
-      })
-
+    const { error: insertError } = await supabase.from('transactions').insert({
+      household_id: household.id, category_id: tmpl.category_id,
+      created_by: session.user.id, type: tmpl.type, date: tmpl.next_due_date,
+      description: tmpl.description, amount, currency: tmpl.currency,
+      exchange_rate: 1, amount_base: amount, is_recurring: true, recurring_id: tmpl.id
+    })
     if (insertError) return
 
-    // Compute next due date
     const next = new Date(tmpl.next_due_date)
     if (tmpl.frequency === 'weekly') next.setDate(next.getDate() + 7)
     else if (tmpl.frequency === 'biweekly') next.setDate(next.getDate() + 14)
     else if (tmpl.frequency === 'monthly') next.setMonth(next.getMonth() + 1)
     else if (tmpl.frequency === 'yearly') next.setFullYear(next.getFullYear() + 1)
-
     const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
-
-    await supabase
-      .from('recurring_templates')
-      .update({ next_due_date: nextStr })
-      .eq('id', tmpl.id)
+    await supabase.from('recurring_templates').update({ next_due_date: nextStr }).eq('id', tmpl.id)
 
     setConfirmingId(null)
     setConfirmAmount('')
     setDueTemplates(prev => prev.filter(t => t.id !== tmpl.id))
 
-    // Re-fetch transactions
     const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth + 1, 0)
     const endDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
-    const { data } = await supabase
-      .from('transactions')
-      .select('*, categories(name, icon, color, parent_id)')
-      .eq('household_id', household.id)
-      .gte('date', startDate)
-      .lte('date', endDate)
-      .order('date', { ascending: false })
+    const { data } = await supabase.from('transactions').select('*, categories(name, icon, color, parent_id)')
+      .eq('household_id', household.id).gte('date', startDate).lte('date', endDate).order('date', { ascending: false })
     if (data) setTransactions(data)
   }
+
+  // Shared styles
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow)' }
+  const sectionHeader = { padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }
+  const sectionTitle = { fontFamily: 'DM Serif Display, serif', fontSize: '16px', color: 'var(--text)' }
 
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '28px', color: 'var(--text)', letterSpacing: '-0.5px' }}>Dashboard</h1>
         <button
           onClick={() => navigate('/add')}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
+          style={{
+            background: 'var(--primary)', color: 'white', border: 'none',
+            padding: '9px 18px', borderRadius: '8px', fontSize: '13.5px',
+            fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer'
+          }}
         >
           + Add Transaction
         </button>
       </div>
 
       {/* Month selector */}
-      <div className="flex items-center justify-between mb-5">
-        <button onClick={goToPrevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">←</button>
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-700">{monthName}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '24px' }}>
+        <button onClick={goToPrevMonth} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: '16px', height: '16px' }}>{Icons.chevronLeft}</span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: '18px', color: 'var(--text)', minWidth: '160px', textAlign: 'center' }}>{monthName}</span>
           {!isCurrentMonth && (
-            <button
-              onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()) }}
-              className="text-xs text-blue-600 hover:underline"
-            >
+            <button onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()) }}
+              style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>
               Today
             </button>
           )}
         </div>
-        <button onClick={goToNextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">→</button>
+        <button onClick={goToNextMonth} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: '16px', height: '16px' }}>{Icons.chevronRight}</span>
+        </button>
       </div>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Income</p>
-          <p className="text-lg font-bold text-green-500">{formatBase(totalIncome)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Expenses</p>
-          <p className="text-lg font-bold text-red-500">{formatBase(totalExpenses)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <p className="text-xs text-gray-400 mb-1">Net</p>
-          <p className={`text-lg font-bold ${netBalance >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {netBalance >= 0 ? '+' : ''}{formatBase(netBalance)}
-          </p>
-        </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '24px' }}>
+        {[
+          { label: 'Income', value: formatBase(totalIncome), color: 'var(--accent)' },
+          { label: 'Expenses', value: formatBase(totalExpenses), color: 'var(--red)' },
+          { label: 'Net', value: (netBalance >= 0 ? '+' : '') + formatBase(netBalance), color: netBalance >= 0 ? 'var(--accent)' : 'var(--red)' }
+        ].map(s => (
+          <div key={s.label} style={{ ...card, padding: '16px 18px' }}>
+            <p style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>{s.label}</p>
+            <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '22px', color: s.color, letterSpacing: '-0.5px' }}>{s.value}</p>
+          </div>
+        ))}
       </div>
 
-      {/* Due recurring transactions */}
+      {/* Due recurring */}
       {dueTemplates.length > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl mb-6 overflow-hidden">
-          <div className="px-5 py-3 border-b border-amber-200">
-            <h2 className="font-semibold text-amber-800 text-sm">
-              🔔 {dueTemplates.length} recurring transaction{dueTemplates.length > 1 ? 's' : ''} due this month
-            </h2>
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', marginBottom: '24px', overflow: 'hidden' }}>
+          <div style={{ padding: '12px 20px', borderBottom: '1px solid #bbf7d0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '16px', height: '16px', color: 'var(--primary)' }}>{Icons.bell}</span>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: 'var(--primary)' }}>
+              {dueTemplates.length} recurring transaction{dueTemplates.length > 1 ? 's' : ''} due this month
+            </span>
           </div>
-          <ul className="divide-y divide-amber-100">
+          <ul>
             {dueTemplates.map(tmpl => (
-              <li key={tmpl.id} className="px-5 py-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg">{tmpl.categories?.icon || '📦'}</span>
+              <li key={tmpl.id} style={{ padding: '14px 20px', borderBottom: '1px solid #bbf7d0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>
+                      {tmpl.categories?.icon || '📦'}
+                    </div>
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{tmpl.description}</p>
-                      <p className="text-xs text-gray-400">Due {tmpl.next_due_date}</p>
+                      <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)' }}>{tmpl.description}</p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>Due {tmpl.next_due_date}</p>
                     </div>
                   </div>
-                  <p className={`text-sm font-semibold ${tmpl.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+                  <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: tmpl.type === 'expense' ? 'var(--red)' : 'var(--accent)' }}>
                     {tmpl.type === 'expense' ? '-' : '+'}{formatBase(tmpl.amount)}
                   </p>
                 </div>
-
                 {confirmingId === tmpl.id ? (
-                  <div className="flex gap-2 mt-2">
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     <input
                       type="number"
                       value={confirmAmount}
                       onChange={(e) => setConfirmAmount(e.target.value)}
-                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      style={{ flex: 1, border: '1px solid var(--border)', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', fontFamily: 'DM Sans, sans-serif', outline: 'none' }}
                     />
-                    <button
-                      onClick={() => handleConfirmRecurring(tmpl)}
-                      className="bg-green-500 hover:bg-green-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-                    >
+                    <button onClick={() => handleConfirmRecurring(tmpl)}
+                      style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                       Confirm
                     </button>
-                    <button
-                      onClick={() => { setConfirmingId(null); setConfirmAmount('') }}
-                      className="border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm px-3 py-2 rounded-lg transition"
-                    >
+                    <button onClick={() => { setConfirmingId(null); setConfirmAmount('') }}
+                      style={{ background: 'none', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
                       Cancel
                     </button>
                   </div>
                 ) : (
-                  <div className="flex gap-2 mt-2">
-                    <button
-                      onClick={() => { setConfirmingId(tmpl.id); setConfirmAmount(tmpl.amount.toString()) }}
-                      className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium py-2 rounded-lg transition"
-                    >
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => { setConfirmingId(tmpl.id); setConfirmAmount(tmpl.amount.toString()) }}
+                      style={{ flex: 1, background: 'var(--primary)', color: 'white', border: 'none', padding: '8px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                       Log it
                     </button>
-                    <button
-                      onClick={() => setDueTemplates(prev => prev.filter(t => t.id !== tmpl.id))}
-                      className="border border-gray-200 text-gray-500 hover:bg-gray-50 text-sm px-4 py-2 rounded-lg transition"
-                    >
+                    <button onClick={() => setDueTemplates(prev => prev.filter(t => t.id !== tmpl.id))}
+                      style={{ background: 'none', border: '1px solid var(--border)', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', color: 'var(--text-muted)', cursor: 'pointer' }}>
                       Skip
                     </button>
                   </div>
@@ -316,22 +266,20 @@ function Dashboard({ household, session }) {
 
       {/* Spending by category */}
       {categoryList.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-700">Spending by Category</h2>
+        <div style={{ ...card, marginBottom: '20px' }}>
+          <div style={sectionHeader}>
+            <span style={sectionTitle}>Spending by Category</span>
           </div>
-          <ul className="divide-y divide-gray-50 px-5">
-            {categoryList.map(cat => (
-              <li key={cat.name} className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-lg">{cat.icon}</span>
-                  <span className="text-sm text-gray-700">{cat.name}</span>
+          <ul>
+            {categoryList.map((cat, i) => (
+              <li key={cat.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: i < categoryList.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '10px', height: '10px', borderRadius: '3px', background: ['var(--primary)', 'var(--accent)', '#4ade80', '#86efac'][i % 4], flexShrink: 0 }} />
+                  <span style={{ fontSize: '14px', color: 'var(--text)' }}>{cat.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-semibold text-red-500">-{formatBase(cat.total)}</p>
-                  <p className="text-xs text-gray-400">
-                    {totalExpenses > 0 ? Math.round((cat.total / totalExpenses) * 100) : 0}%
-                  </p>
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: 'var(--red)' }}>-{formatBase(cat.total)}</p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>{totalExpenses > 0 ? Math.round((cat.total / totalExpenses) * 100) : 0}%</p>
                 </div>
               </li>
             ))}
@@ -340,47 +288,38 @@ function Dashboard({ household, session }) {
       )}
 
       {/* Transaction list */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-700">Transactions</h2>
+      <div style={card}>
+        <div style={sectionHeader}>
+          <span style={sectionTitle}>Transactions</span>
         </div>
-
-        {loading && (
-          <div className="px-5 py-8 text-center text-gray-400">Loading...</div>
-        )}
-
+        {loading && <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-subtle)' }}>Loading...</div>}
         {!loading && transactions.length === 0 && (
-          <div className="px-5 py-8 text-center text-gray-400">
+          <div style={{ padding: '32px', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '14px' }}>
             No transactions for {monthName}.
           </div>
         )}
-
         {!loading && transactions.length > 0 && (
-          <ul className="divide-y divide-gray-50">
-            {transactions.map(t => (
-              <li
-                key={t.id}
-                onClick={() => navigate(`/edit/${t.id}`)}
-                className="flex items-center justify-between px-5 py-4 hover:bg-gray-50 cursor-pointer transition"
+          <ul>
+            {transactions.map((t, i) => (
+              <li key={t.id} onClick={() => navigate(`/edit/${t.id}`)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 20px', borderBottom: i < transactions.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center text-lg">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>
                     {t.categories?.icon || '📦'}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      {t.categories?.name || 'Uncategorised'}
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {t.description || formatDate(t.date)}
-                    </p>
+                    <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)' }}>{t.categories?.name || 'Uncategorised'}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>{t.description || formatDate(t.date)}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className={`text-sm font-semibold ${t.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
-                    {formatAmount(t.amount, t.currency, t.type)}
+                <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: t.type === 'expense' ? 'var(--red)' : 'var(--accent)' }}>
+                    {t.type === 'expense' ? '-' : '+'}{formatBase(t.amount)}
                   </p>
-                  <p className="text-xs text-gray-400">{formatDate(t.date)}</p>
+                  <p style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>{formatDate(t.date)}</p>
                 </div>
               </li>
             ))}
