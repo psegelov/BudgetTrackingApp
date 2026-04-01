@@ -1,157 +1,56 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
-function JoinHousehold({ session }) {
+function ProfileSetup({ session, setProfile }) {
   const navigate = useNavigate()
-  const { token } = useParams()
-  const [invite, setInvite] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [joining, setJoining] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  useEffect(() => {
-    // Wait for session to load
-    if (session === undefined) return
-    // If not logged in, save token and redirect to login
-    if (!session) {
-      navigate(`/login?invite=${token}`)
-      return
-    }
-
-    const fetchInvite = async () => {
-      const { data, error } = await supabase
-        .from('household_invites')
-        .select('id, household_id, status, expires_at, households(id, name, currency)')
-        .eq('invite_token', token)
-        .single()
-
-      if (error || !data) {
-        setError('This invite link is invalid.')
-        setLoading(false)
-        return
-      }
-
-      if (data.status !== 'pending') {
-        setError('This invite has already been used.')
-        setLoading(false)
-        return
-      }
-
-      if (new Date(data.expires_at) < new Date()) {
-        setError('This invite link has expired.')
-        setLoading(false)
-        return
-      }
-
-      setInvite(data)
-      setLoading(false)
-    }
-
-    fetchInvite()
-  }, [token])
-
-  const handleJoin = async () => {
-    setJoining(true)
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
     setError(null)
-
-    // Check if already a member
-    const { data: existing } = await supabase
-      .from('household_members')
-      .select('id')
-      .eq('household_id', invite.household_id)
-      .eq('user_id', session.user.id)
-      .maybeSingle()
-
-    if (existing) {
-      setError('You are already a member of this household.')
-      setJoining(false)
-      return
-    }
-
-    // Add as member
-    const { error: memberError } = await supabase
-      .from('household_members')
-      .insert({
-        household_id: invite.household_id,
-        user_id: session.user.id,
-        role: 'member'
-      })
-
-    if (memberError) {
-      setError(memberError.message)
-      setJoining(false)
-      return
-    }
-
-    // Mark invite as accepted
-    await supabase
-      .from('household_invites')
-      .update({ status: 'accepted' })
-      .eq('id', invite.id)
-
-    // Force reload so App.jsx re-fetches household
-    window.location.href = '/dashboard'
+    const { error: updateError } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', session.user.id)
+    if (updateError) { setError(updateError.message); setLoading(false); return }
+    setProfile({ full_name: fullName })
+    navigate('/setup')
   }
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <p className="text-gray-400">Loading...</p>
-    </div>
-  )
-
-  if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm text-center">
-        <div className="text-5xl mb-4">❌</div>
-        <h1 className="text-xl font-bold text-gray-800 mb-2">Invalid invite</h1>
-        <p className="text-sm text-gray-400 mb-6">{error}</p>
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="text-sm text-blue-600 hover:underline"
-        >
-          Go to dashboard
-        </button>
-      </div>
-    </div>
-  )
-
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🏠</div>
-          <h1 className="text-2xl font-bold text-gray-800">You're invited!</h1>
-          <p className="text-sm text-gray-400 mt-1">
-            Join <span className="font-semibold text-gray-600">{invite.households.name}</span>
-          </p>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+      <div style={{ width: '100%', maxWidth: '380px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <svg style={{ width: '24px', height: '24px' }} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+            </svg>
+          </div>
+          <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '26px', color: 'var(--primary)', letterSpacing: '-0.5px' }}>Your profile</h1>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '4px' }}>Just a few details to get started</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <p className="text-sm text-gray-500 mb-6">
-            You're about to join <span className="font-semibold text-gray-800">{invite.households.name}</span>. 
-            You'll be able to see and add transactions for this household.
-          </p>
-
-          <div className="space-y-3">
-            <button
-              onClick={handleJoin}
-              disabled={joining}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition"
-            >
-              {joining ? 'Joining...' : 'Accept invite'}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '14px', padding: '28px', boxShadow: 'var(--shadow-md)' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: 'var(--text)', marginBottom: '6px' }}>Full name</label>
+              <input type="text" placeholder="e.g. Phillip Segelov" value={fullName} onChange={(e) => setFullName(e.target.value)} required
+                style={{ width: '100%', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '14px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text)', background: 'var(--surface)', outline: 'none', boxSizing: 'border-box' }}
+                onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(22,101,52,0.1)' }}
+                onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
+              />
+            </div>
+            {error && <p style={{ fontSize: '13px', color: 'var(--red)', background: 'var(--red-light)', padding: '10px 12px', borderRadius: '8px' }}>{error}</p>}
+            <button type="submit" disabled={loading}
+              style={{ background: loading ? 'var(--text-muted)' : 'var(--primary)', color: 'white', border: 'none', padding: '11px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: loading ? 'not-allowed' : 'pointer' }}>
+              {loading ? 'Saving...' : 'Continue'}
             </button>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="w-full border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium py-2.5 rounded-lg transition"
-            >
-              Decline
-            </button>
-          </div>
+          </form>
         </div>
       </div>
     </div>
   )
 }
 
-export default JoinHousehold
+export default ProfileSetup

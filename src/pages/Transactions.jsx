@@ -2,6 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
+const Icons = {
+  filter: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 4h18M7 8h10M11 12h2M11 16h2"/></svg>,
+  chevronDown: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M19 9l-7 7-7-7"/></svg>,
+  chevronRight: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>,
+  x: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>,
+}
+
 function Transactions({ household }) {
   const navigate = useNavigate()
   const [transactions, setTransactions] = useState([])
@@ -19,7 +26,8 @@ function Transactions({ household }) {
 
   useEffect(() => {
     const fetchCategories = async () => {
-      const { data } = await supabase.from('categories').select('id, name, icon, parent_id, type').eq('household_id', household.id).eq('is_active', true).order('sort_order')
+      const { data } = await supabase.from('categories').select('id, name, icon, parent_id, type')
+        .eq('household_id', household.id).eq('is_active', true).order('sort_order')
       if (data) setCategories(data)
     }
     fetchCategories()
@@ -58,19 +66,16 @@ function Transactions({ household }) {
   const subCategories = visibleCategories.filter(c => c.parent_id)
 
   const getSubsForParent = (parentId) => subCategories.filter(c => c.parent_id === parentId)
-
   const isParentSelected = (parentId) => {
     const subs = getSubsForParent(parentId)
     if (subs.length === 0) return selectedCategories.includes(parentId)
     return subs.every(s => selectedCategories.includes(s.id)) && selectedCategories.includes(parentId)
   }
-
   const isParentPartial = (parentId) => {
     const subs = getSubsForParent(parentId)
     if (subs.length === 0) return false
     return subs.some(s => selectedCategories.includes(s.id)) && !subs.every(s => selectedCategories.includes(s.id))
   }
-
   const toggleParent = (parent) => {
     const subs = getSubsForParent(parent.id)
     const allIds = [parent.id, ...subs.map(s => s.id)]
@@ -78,7 +83,6 @@ function Transactions({ household }) {
     if (allSelected) setSelectedCategories(prev => prev.filter(id => !allIds.includes(id)))
     else setSelectedCategories(prev => [...new Set([...prev, ...allIds])])
   }
-
   const toggleSub = (subId) => setSelectedCategories(prev => prev.includes(subId) ? prev.filter(id => id !== subId) : [...prev, subId])
   const toggleExpand = (parentId) => setExpandedParents(prev => prev.includes(parentId) ? prev.filter(id => id !== parentId) : [...prev, parentId])
 
@@ -86,7 +90,6 @@ function Transactions({ household }) {
     const symbol = household.currency === 'ILS' ? '₪' : household.currency === 'USD' ? '$' : '€'
     return `${symbol}${Number(amount).toLocaleString()}`
   }
-
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
 
   const activeFilterCount = [filterType !== 'all', selectedCategories.length > 0, startDate !== '', endDate !== '', sortBy !== 'date_desc'].filter(Boolean).length
@@ -98,31 +101,18 @@ function Transactions({ household }) {
 
   const handleExportCSV = () => {
     if (filtered.length === 0) return
-
     const headers = ['Date', 'Type', 'Category', 'Subcategory', 'Description', 'Amount', 'Currency', 'Amount (Base)']
-
     const rows = filtered.map(t => {
       const isSubCat = t.categories?.parent_id
       const parentCat = isSubCat ? categories.find(c => c.id === t.categories?.parent_id) : null
-      const categoryName = parentCat?.name || t.categories?.name || 'Uncategorised'
-      const subCategoryName = isSubCat ? t.categories?.name : ''
-
       return [
         new Date(t.date).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
-        t.type,
-        categoryName,
-        subCategoryName,
-        t.description || '',
-        t.amount,
-        t.currency,
-        t.amount_base
+        t.type, parentCat?.name || t.categories?.name || 'Uncategorised',
+        isSubCat ? t.categories?.name : '', t.description || '',
+        t.amount, t.currency, t.amount_base
       ]
     })
-
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-      .join('\n')
-
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -132,69 +122,101 @@ function Transactions({ household }) {
     URL.revokeObjectURL(url)
   }
 
+  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: '8px', padding: '9px 12px', fontSize: '13.5px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text)', background: 'var(--surface)', outline: 'none', boxSizing: 'border-box' }
+  const labelStyle = { display: 'block', fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)', marginBottom: '5px' }
+
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Transactions</h1>
-        <div className="flex gap-2">
+    <div style={{ maxWidth: '860px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '26px', color: 'var(--text)', letterSpacing: '-0.5px' }}>Transactions</h1>
+        <div style={{ display: 'flex', gap: '8px' }}>
           {filtered.length > 0 && (
-            <button
-              onClick={handleExportCSV}
-              className="border border-gray-200 text-gray-600 hover:bg-gray-50 text-sm font-medium px-4 py-2 rounded-lg transition"
-            >
+            <button onClick={handleExportCSV}
+              style={{ border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
               Export CSV
             </button>
           )}
-          <button
-            onClick={() => navigate('/add')}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
+          <button onClick={() => navigate('/add')}
+            style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px 18px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
             + Add
           </button>
         </div>
       </div>
 
-      <div className="mb-3">
-        <input type="text" placeholder="Search by description or category..." value={search} onChange={(e) => setSearch(e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: '12px' }}>
+        <input type="text" placeholder="Search by description or category..."
+          value={search} onChange={(e) => setSearch(e.target.value)}
+          style={{ ...inputStyle, paddingLeft: '16px' }}
+          onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(22,101,52,0.1)' }}
+          onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }}
+        />
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
+      {/* Filter row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
         <button onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg border transition ${showFilters || activeFilterCount > 0 ? 'border-blue-500 text-blue-600 bg-blue-50' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
-          🔽 Filters
-          {activeFilterCount > 0 && <span className="bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">{activeFilterCount}</span>}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px',
+            borderRadius: '8px', border: `1px solid ${showFilters || activeFilterCount > 0 ? 'var(--primary)' : 'var(--border)'}`,
+            background: showFilters || activeFilterCount > 0 ? 'var(--primary-light)' : 'var(--surface)',
+            color: showFilters || activeFilterCount > 0 ? 'var(--primary)' : 'var(--text-muted)',
+            fontSize: '13px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer'
+          }}>
+          <span style={{ width: '14px', height: '14px' }}>{Icons.filter}</span>
+          Filters
+          {activeFilterCount > 0 && (
+            <span style={{ background: 'var(--primary)', color: 'white', borderRadius: '50%', width: '18px', height: '18px', fontSize: '11px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {activeFilterCount}
+            </span>
+          )}
         </button>
-        {activeFilterCount > 0 && <button onClick={clearFilters} className="text-xs text-red-500 border border-red-200 px-3 py-2 rounded-lg hover:bg-red-50 transition">Remove filters</button>}
-        <p className="text-xs text-gray-400 ml-auto">{filtered.length} transactions</p>
+        {activeFilterCount > 0 && (
+          <button onClick={clearFilters}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '7px 12px', borderRadius: '8px', border: '1px solid #fca5a5', background: 'none', color: 'var(--red)', fontSize: '13px', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
+            <span style={{ width: '13px', height: '13px' }}>{Icons.x}</span>
+            Remove filters
+          </button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--text-subtle)' }}>{filtered.length} transactions</span>
       </div>
 
+      {/* Filters panel */}
       {showFilters && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 space-y-4">
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', padding: '16px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+          {/* Type */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
-            <div className="flex rounded-lg overflow-hidden border border-gray-200">
+            <div style={labelStyle}>Type</div>
+            <div style={{ display: 'flex', background: 'var(--bg)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border)' }}>
               {['all', 'expense', 'income'].map(type => (
                 <button key={type} onClick={() => setFilterType(type)}
-                  className={`flex-1 py-2 text-sm font-medium transition capitalize ${filterType === type ? type === 'expense' ? 'bg-red-500 text-white' : type === 'income' ? 'bg-green-500 text-white' : 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>
+                  style={{
+                    flex: 1, padding: '7px', borderRadius: '6px', border: 'none', fontSize: '13px',
+                    fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'all 0.15s',
+                    background: filterType === type ? (type === 'expense' ? 'var(--red)' : type === 'income' ? 'var(--accent)' : 'var(--primary)') : 'transparent',
+                    color: filterType === type ? 'white' : 'var(--text-muted)'
+                  }}>
                   {type === 'all' ? 'All' : type.charAt(0).toUpperCase() + type.slice(1)}
                 </button>
               ))}
             </div>
           </div>
 
+          {/* Categories */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-2">
-              Categories {selectedCategories.length > 0 && <span className="ml-2 text-blue-600">({selectedCategories.length} selected)</span>}
-            </label>
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div style={labelStyle}>
+              Categories {selectedCategories.length > 0 && <span style={{ color: 'var(--primary)' }}>({selectedCategories.length} selected)</span>}
+            </div>
+            <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
               <button type="button" onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition">
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 12px', background: 'none', border: 'none', fontSize: '13.5px', color: 'var(--text)', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                 <span>{selectedCategories.length === 0 ? 'All categories' : `${selectedCategories.length} selected`}</span>
-                <span className="text-gray-400">{showCategoryDropdown ? '▲' : '▼'}</span>
+                <span style={{ width: '16px', height: '16px', color: 'var(--text-muted)' }}>{showCategoryDropdown ? Icons.chevronDown : Icons.chevronRight}</span>
               </button>
               {showCategoryDropdown && (
-                <div className="border-t border-gray-100 max-h-52 overflow-y-auto">
+                <div style={{ borderTop: '1px solid var(--border)', maxHeight: '200px', overflowY: 'auto' }}>
                   {parentCategories.map(parent => {
                     const subs = getSubsForParent(parent.id)
                     const isExpanded = expandedParents.includes(parent.id)
@@ -202,27 +224,30 @@ function Transactions({ household }) {
                     const isPartial = isParentPartial(parent.id)
                     return (
                       <div key={parent.id}>
-                        <div className={`flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
-                          {subs.length > 0 ? <button onClick={() => toggleExpand(parent.id)} className="text-gray-400 hover:text-gray-600 w-4 text-xs flex-shrink-0">{isExpanded ? '▼' : '▶'}</button> : <div className="w-4 flex-shrink-0" />}
-                          <button onClick={() => toggleParent(parent)} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-blue-600 border-blue-600' : isPartial ? 'bg-blue-200 border-blue-400' : 'border-gray-300 hover:border-blue-400'}`}>
-                            {isSelected && <span className="text-white text-xs">✓</span>}
-                            {isPartial && <span className="text-blue-600 text-xs">—</span>}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', background: isSelected ? 'var(--primary-light)' : 'transparent' }}>
+                          {subs.length > 0 ? (
+                            <button onClick={() => toggleExpand(parent.id)} style={{ width: '14px', height: '14px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0, padding: 0 }}>
+                              {isExpanded ? Icons.chevronDown : Icons.chevronRight}
+                            </button>
+                          ) : <div style={{ width: '14px' }} />}
+                          <button onClick={() => toggleParent(parent)}
+                            style={{ width: '15px', height: '15px', borderRadius: '4px', border: `1px solid ${isSelected ? 'var(--primary)' : isPartial ? 'var(--accent)' : 'var(--border)'}`, background: isSelected ? 'var(--primary)' : isPartial ? 'var(--primary-light)' : 'white', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white' }}>
+                            {isSelected ? '✓' : isPartial ? '—' : ''}
                           </button>
-                          <button onClick={() => toggleParent(parent)} className="flex items-center gap-2 flex-1 text-left">
-                            <span>{parent.icon}</span>
-                            <span className="text-sm text-gray-700 font-medium">{parent.name}</span>
+                          <button onClick={() => toggleParent(parent)} style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text)', fontFamily: 'DM Sans, sans-serif' }}>{parent.name}</span>
                           </button>
                         </div>
                         {isExpanded && subs.map(sub => {
                           const isSubSelected = selectedCategories.includes(sub.id)
                           return (
-                            <div key={sub.id} className={`flex items-center gap-2 px-3 py-2 pl-14 hover:bg-gray-50 ${isSubSelected ? 'bg-blue-50' : ''}`}>
-                              <button onClick={() => toggleSub(sub.id)} className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${isSubSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300 hover:border-blue-400'}`}>
-                                {isSubSelected && <span className="text-white text-xs">✓</span>}
+                            <div key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 12px 7px 34px', background: isSubSelected ? 'var(--primary-light)' : 'transparent' }}>
+                              <button onClick={() => toggleSub(sub.id)}
+                                style={{ width: '15px', height: '15px', borderRadius: '4px', border: `1px solid ${isSubSelected ? 'var(--primary)' : 'var(--border)'}`, background: isSubSelected ? 'var(--primary)' : 'white', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'white' }}>
+                                {isSubSelected ? '✓' : ''}
                               </button>
-                              <button onClick={() => toggleSub(sub.id)} className="flex items-center gap-2 flex-1 text-left">
-                                <span>{sub.icon}</span>
-                                <span className="text-sm text-gray-400">{sub.name}</span>
+                              <button onClick={() => toggleSub(sub.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif' }}>
+                                {sub.name}
                               </button>
                             </div>
                           )
@@ -235,20 +260,22 @@ function Transactions({ household }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* Date range */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">From</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div style={labelStyle}>From</div>
+              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-500 mb-1">To</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div style={labelStyle}>To</div>
+              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} style={inputStyle} />
             </div>
           </div>
 
+          {/* Sort */}
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">Sort by</label>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            <div style={labelStyle}>Sort by</div>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} style={inputStyle}>
               <option value="date_desc">Date — newest first</option>
               <option value="date_asc">Date — oldest first</option>
               <option value="amount_desc">Amount — highest first</option>
@@ -258,62 +285,54 @@ function Transactions({ household }) {
         </div>
       )}
 
+      {/* Summary cards */}
       {!loading && filtered.length > 0 && (
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-            <p className="text-xs text-gray-400 mb-1">Income</p>
-            <p className="text-sm font-bold text-green-500">+{formatBase(totalIncome)}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-            <p className="text-xs text-gray-400 mb-1">Expenses</p>
-            <p className="text-sm font-bold text-red-500">-{formatBase(totalExpenses)}</p>
-          </div>
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3">
-            <p className="text-xs text-gray-400 mb-1">Net</p>
-            <p className={`text-sm font-bold ${totalIncome - totalExpenses >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {totalIncome - totalExpenses >= 0 ? '+' : ''}{formatBase(totalIncome - totalExpenses)}
-            </p>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '16px' }}>
+          {[
+            { label: 'Income', value: `+${formatBase(totalIncome)}`, color: 'var(--accent)' },
+            { label: 'Expenses', value: `-${formatBase(totalExpenses)}`, color: 'var(--red)' },
+            { label: 'Net', value: (totalIncome - totalExpenses >= 0 ? '+' : '') + formatBase(totalIncome - totalExpenses), color: totalIncome - totalExpenses >= 0 ? 'var(--accent)' : 'var(--red)' }
+          ].map(s => (
+            <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 16px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '500', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>{s.label}</p>
+              <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '17px', color: s.color }}>{s.value}</p>
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-        {loading && <div className="px-5 py-8 text-center text-gray-400">Loading...</div>}
-        {!loading && filtered.length === 0 && <div className="px-5 py-8 text-center text-gray-400">No transactions found.</div>}
+      {/* Table */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden', boxShadow: 'var(--shadow)' }}>
+        {loading && <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-subtle)' }}>Loading...</div>}
+        {!loading && filtered.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-subtle)', fontSize: '14px' }}>No transactions found.</div>}
 
         {!loading && filtered.length > 0 && (
           <>
             {/* Desktop table */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', fontSize: '13.5px', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Date</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Category</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Subcategory</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-400">Description</th>
-                    <th className="text-right px-5 py-3 text-xs font-medium text-gray-400">Amount</th>
+                  <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                    {['Date', 'Category', 'Subcategory', 'Description', 'Amount'].map((h, i) => (
+                      <th key={h} style={{ padding: '12px 20px', textAlign: i === 4 ? 'right' : 'left', fontSize: '11px', fontWeight: '600', color: 'var(--text-subtle)', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: 'DM Sans, sans-serif' }}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {filtered.map(t => {
+                <tbody>
+                  {filtered.map((t, i) => {
                     const base = Number(t.amount_base)
                     const isSubCat = t.categories?.parent_id
                     const parentCat = isSubCat ? categories.find(c => c.id === t.categories?.parent_id) : null
                     return (
-                      <tr key={t.id} onClick={() => navigate(`/edit/${t.id}`)} className="hover:bg-gray-50 cursor-pointer">
-                        <td className="px-5 py-3 text-gray-500 whitespace-nowrap">{formatDate(t.date)}</td>
-                        <td className="px-5 py-3 text-gray-700">
-                          <div className="flex items-center gap-1.5">
-                            <span>{(parentCat || t.categories)?.icon || '📦'}</span>
-                            <span>{parentCat?.name || t.categories?.name || 'Uncategorised'}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3 text-gray-500">
-                          {isSubCat ? <div className="flex items-center gap-1.5"><span>{t.categories?.icon}</span><span>{t.categories?.name}</span></div> : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-gray-500">{t.description || '—'}</td>
-                        <td className={`px-5 py-3 text-right font-medium ${t.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
+                      <tr key={t.id} onClick={() => navigate(`/edit/${t.id}`)}
+                        style={{ borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer', transition: 'background 0.1s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <td style={{ padding: '13px 20px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{formatDate(t.date)}</td>
+                        <td style={{ padding: '13px 20px', color: 'var(--text)', fontWeight: '500' }}>{parentCat?.name || t.categories?.name || 'Uncategorised'}</td>
+                        <td style={{ padding: '13px 20px', color: 'var(--text-muted)' }}>{isSubCat ? t.categories?.name : '—'}</td>
+                        <td style={{ padding: '13px 20px', color: 'var(--text-muted)' }}>{t.description || '—'}</td>
+                        <td style={{ padding: '13px 20px', textAlign: 'right', fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: t.type === 'expense' ? 'var(--red)' : 'var(--accent)' }}>
                           {t.type === 'expense' ? '-' : '+'}{formatBase(base)}
                         </td>
                       </tr>
@@ -321,45 +340,48 @@ function Transactions({ household }) {
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-gray-200">
-                    <td colSpan={4} className="px-5 py-3 font-semibold text-gray-700">Total</td>
-                    <td className="px-5 py-3 text-right font-bold text-gray-700">{formatBase(totalFiltered)}</td>
+                  <tr style={{ borderTop: '2px solid var(--border)' }}>
+                    <td colSpan={4} style={{ padding: '13px 20px', fontWeight: '600', color: 'var(--text)', fontFamily: 'DM Sans, sans-serif' }}>Total</td>
+                    <td style={{ padding: '13px 20px', textAlign: 'right', fontFamily: 'DM Serif Display, serif', fontSize: '16px', color: 'var(--text)', fontWeight: '700' }}>{formatBase(totalFiltered)}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
-            {/* Mobile card list */}
-            <ul className="md:hidden divide-y divide-gray-50">
-              {filtered.map(t => {
+            {/* Mobile list */}
+            <ul className="md:hidden">
+              {filtered.map((t, i) => {
                 const base = Number(t.amount_base)
                 const isSubCat = t.categories?.parent_id
                 const parentCat = isSubCat ? categories.find(c => c.id === t.categories?.parent_id) : null
                 return (
-                  <li key={t.id} onClick={() => navigate(`/edit/${t.id}`)} className="px-4 py-3 hover:bg-gray-50 cursor-pointer">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-lg flex-shrink-0">{(parentCat || t.categories)?.icon || '📦'}</span>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-gray-800 truncate">
-                            {parentCat?.name || t.categories?.name || 'Uncategorised'}
-                            {isSubCat && <span className="text-gray-400 font-normal"> · {t.categories?.name}</span>}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {formatDate(t.date)}{t.description && ` · ${t.description}`}
-                          </p>
-                        </div>
+                  <li key={t.id} onClick={() => navigate(`/edit/${t.id}`)}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 16px', borderBottom: i < filtered.length - 1 ? '1px solid var(--border)' : 'none', cursor: 'pointer' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                      <div style={{ width: '34px', height: '34px', borderRadius: '8px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '15px' }}>
+                        {t.categories?.icon || '📦'}
                       </div>
-                      <p className={`text-sm font-semibold flex-shrink-0 ml-2 ${t.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>
-                        {t.type === 'expense' ? '-' : '+'}{formatBase(base)}
-                      </p>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {parentCat?.name || t.categories?.name || 'Uncategorised'}
+                          {isSubCat && <span style={{ color: 'var(--text-muted)', fontWeight: '400' }}> · {t.categories?.name}</span>}
+                        </p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>
+                          {formatDate(t.date)}{t.description && ` · ${t.description}`}
+                        </p>
+                      </div>
                     </div>
+                    <p style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: t.type === 'expense' ? 'var(--red)' : 'var(--accent)', flexShrink: 0, marginLeft: '8px' }}>
+                      {t.type === 'expense' ? '-' : '+'}{formatBase(base)}
+                    </p>
                   </li>
                 )
               })}
-              <li className="px-4 py-3 border-t-2 border-gray-200 flex justify-between">
-                <span className="font-semibold text-gray-700">Total</span>
-                <span className="font-bold text-gray-700">{formatBase(totalFiltered)}</span>
+              <li style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 16px', borderTop: '2px solid var(--border)' }}>
+                <span style={{ fontWeight: '600', color: 'var(--text)', fontSize: '13.5px' }}>Total</span>
+                <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: 'var(--text)' }}>{formatBase(totalFiltered)}</span>
               </li>
             </ul>
           </>

@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useToastContext } from '../context/ToastContext'
 
+const Icons = {
+  chevronLeft: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>,
+  chevronRight: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>,
+  edit: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>,
+  x: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M6 18L18 6M6 6l12 12"/></svg>,
+}
+
 function Budgets({ household }) {
   const [budgets, setBudgets] = useState([])
   const [categories, setCategories] = useState([])
@@ -17,46 +24,21 @@ function Budgets({ household }) {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth())
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
 
-  const emptyForm = {
-    category_id: '',
-    amount: '',
-    currency: household.currency,
-    repeats: true,
-    month: null,
-    year: selectedYear
-  }
-
+  const emptyForm = { category_id: '', amount: '', currency: household.currency, repeats: true, month: null, year: selectedYear }
   const [form, setForm] = useState(emptyForm)
 
-  useEffect(() => {
-    fetchData()
-  }, [household.id, selectedMonth, selectedYear])
+  useEffect(() => { fetchData() }, [household.id, selectedMonth, selectedYear])
 
   const fetchData = async () => {
     setLoading(true)
-
     const startDate = `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-01`
     const lastDay = new Date(selectedYear, selectedMonth + 1, 0)
     const endDate = `${lastDay.getFullYear()}-${String(lastDay.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`
 
     const [{ data: budgetData }, { data: catData }, { data: txData }] = await Promise.all([
-      supabase
-        .from('budgets')
-        .select('*')
-        .eq('household_id', household.id)
-        .eq('year', selectedYear),
-      supabase
-        .from('categories')
-        .select('id, name, icon, color, type, parent_id')
-        .eq('household_id', household.id)
-        .eq('is_active', true)
-        .order('sort_order'),
-      supabase
-        .from('transactions')
-        .select('category_id, amount_base, type')
-        .eq('household_id', household.id)
-        .gte('date', startDate)
-        .lte('date', endDate)
+      supabase.from('budgets').select('*').eq('household_id', household.id).eq('year', selectedYear),
+      supabase.from('categories').select('id, name, icon, color, type, parent_id').eq('household_id', household.id).eq('is_active', true).order('sort_order'),
+      supabase.from('transactions').select('category_id, amount_base, type').eq('household_id', household.id).gte('date', startDate).lte('date', endDate)
     ])
 
     if (budgetData) setBudgets(budgetData)
@@ -65,107 +47,40 @@ function Budgets({ household }) {
     setLoading(false)
   }
 
-  // Get effective budget for a category in selected month
-  // Specific month override takes priority over repeating
   const getEffectiveBudget = (categoryId) => {
-    const specific = budgets.find(
-      b => b.category_id === categoryId &&
-      b.month === selectedMonth + 1 &&
-      b.year === selectedYear
-    )
+    const specific = budgets.find(b => b.category_id === categoryId && b.month === selectedMonth + 1 && b.year === selectedYear)
     if (specific) return specific
-
-    const repeating = budgets.find(
-      b => b.category_id === categoryId &&
-      b.repeats === true &&
-      b.month === null &&
-      b.year === selectedYear
-    )
-    return repeating || null
+    return budgets.find(b => b.category_id === categoryId && b.repeats === true && b.month === null && b.year === selectedYear) || null
   }
 
-  // Get actual spending for a category this month
-    const getActual = (categoryId) => {
-    // Get all subcategory IDs for this parent
-    const subCategoryIds = categories
-        .filter(c => c.parent_id === categoryId)
-        .map(c => c.id)
-
-    // Include the parent itself and all its subcategories
-    const relevantIds = [categoryId, ...subCategoryIds]
-
-    return transactions
-        .filter(t => relevantIds.includes(t.category_id) && t.type === 'expense')
-        .reduce((sum, t) => sum + Number(t.amount_base), 0)
-    }
+  const getActual = (categoryId) => {
+    const subCategoryIds = categories.filter(c => c.parent_id === categoryId).map(c => c.id)
+    return transactions.filter(t => [categoryId, ...subCategoryIds].includes(t.category_id) && t.type === 'expense').reduce((sum, t) => sum + Number(t.amount_base), 0)
+  }
 
   const expenseCategories = categories.filter(c => c.type === 'expense' && !c.parent_id)
-
   const budgetedCategories = expenseCategories.filter(c => getEffectiveBudget(c.id))
   const unbudgetedCategories = expenseCategories.filter(c => !getEffectiveBudget(c.id))
-
-  const totalBudgeted = budgetedCategories.reduce((sum, c) => {
-    const b = getEffectiveBudget(c.id)
-    return sum + Number(b?.amount_base || 0)
-  }, 0)
-
+  const totalBudgeted = budgetedCategories.reduce((sum, c) => sum + Number(getEffectiveBudget(c.id)?.amount_base || 0), 0)
   const totalActual = budgetedCategories.reduce((sum, c) => sum + getActual(c.id), 0)
 
-  const handleAdd = (categoryId = '') => {
-    setEditingBudget(null)
-    setForm({ ...emptyForm, category_id: categoryId, year: selectedYear })
-    setError(null)
-    setShowForm(true)
-  }
-
-  const handleEdit = (budget) => {
-    setEditingBudget(budget)
-    setForm({
-      category_id: budget.category_id,
-      amount: budget.amount,
-      currency: budget.currency,
-      repeats: budget.repeats,
-      month: budget.month,
-      year: budget.year
-    })
-    setError(null)
-    setShowForm(true)
-  }
+  const handleAdd = (categoryId = '') => { setEditingBudget(null); setForm({ ...emptyForm, category_id: categoryId, year: selectedYear }); setError(null); setShowForm(true) }
+  const handleEdit = (budget) => { setEditingBudget(budget); setForm({ category_id: budget.category_id, amount: budget.amount, currency: budget.currency, repeats: budget.repeats, month: budget.month, year: budget.year }); setError(null); setShowForm(true) }
 
   const handleSave = async (e) => {
     e.preventDefault()
     setSaving(true)
     setError(null)
-
     const amount = parseFloat(form.amount)
-
-    const payload = {
-      household_id: household.id,
-      category_id: form.category_id,
-      period: 'monthly',
-      year: selectedYear,
-      month: form.repeats ? null : selectedMonth + 1,
-      amount: amount,
-      currency: form.currency,
-      amount_base: amount,
-      repeats: form.repeats
-    }
+    const payload = { household_id: household.id, category_id: form.category_id, period: 'monthly', year: selectedYear, month: form.repeats ? null : selectedMonth + 1, amount, currency: form.currency, amount_base: amount, repeats: form.repeats }
 
     if (editingBudget) {
-      const { error: updateError } = await supabase
-        .from('budgets')
-        .update(payload)
-        .eq('id', editingBudget.id)
-
-      if (updateError) { setError(updateError.message); setSaving(false); return }
+      const { error: e } = await supabase.from('budgets').update(payload).eq('id', editingBudget.id)
+      if (e) { setError(e.message); setSaving(false); return }
     } else {
-      const { error: insertError } = await supabase
-        .from('budgets')
-        .insert(payload)
-
-      if (insertError) { setError(insertError.message); setSaving(false); return }
+      const { error: e } = await supabase.from('budgets').insert(payload)
+      if (e) { setError(e.message); setSaving(false); return }
     }
-
     await fetchData()
     setShowForm(false)
     toast.success(editingBudget ? 'Budget updated.' : 'Budget set.')
@@ -175,107 +90,80 @@ function Budgets({ household }) {
 
   const handleDelete = async () => {
     if (!editingBudget) return
-    const { error: deleteError } = await supabase
-      .from('budgets')
-      .delete()
-      .eq('id', editingBudget.id)
-
-    if (deleteError) { setError(deleteError.message); return }
-
+    const { error: e } = await supabase.from('budgets').delete().eq('id', editingBudget.id)
+    if (e) { setError(e.message); return }
     await fetchData()
     setShowForm(false)
     toast.success('Budget deleted.')
     setEditingBudget(null)
   }
 
-  const monthName = new Date(selectedYear, selectedMonth).toLocaleDateString('en-GB', {
-    month: 'long', year: 'numeric'
-  })
-
+  const monthName = new Date(selectedYear, selectedMonth).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })
   const isCurrentMonth = selectedMonth === now.getMonth() && selectedYear === now.getFullYear()
-
-  const goToPrevMonth = () => {
-    if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1) }
-    else setSelectedMonth(m => m - 1)
-  }
-
-  const goToNextMonth = () => {
-    if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(y => y + 1) }
-    else setSelectedMonth(m => m + 1)
-  }
+  const goToPrevMonth = () => { if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(y => y - 1) } else setSelectedMonth(m => m - 1) }
+  const goToNextMonth = () => { if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(y => y + 1) } else setSelectedMonth(m => m + 1) }
 
   const formatBase = (amount) => {
     const symbol = household.currency === 'ILS' ? '₪' : household.currency === 'USD' ? '$' : '€'
     return `${symbol}${Number(amount).toLocaleString()}`
   }
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-20 text-gray-400">Loading...</div>
-  )
+  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '14px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text)', background: 'var(--surface)', outline: 'none', boxSizing: 'border-box' }
+  const labelStyle = { display: 'block', fontSize: '13px', fontWeight: '500', color: 'var(--text)', marginBottom: '6px' }
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow)' }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-subtle)' }}>Loading...</div>
 
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Budgets</h1>
-        <button
-          onClick={() => handleAdd()}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-        >
+    <div style={{ maxWidth: '680px', margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
+        <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '26px', color: 'var(--text)', letterSpacing: '-0.5px' }}>Budgets</h1>
+        <button onClick={() => handleAdd()} style={{ background: 'var(--primary)', color: 'white', border: 'none', padding: '8px 18px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
           + Add Budget
         </button>
       </div>
 
       {/* Month selector */}
-      <div className="flex items-center justify-between mb-6">
-        <button onClick={goToPrevMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">←</button>
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-700">{monthName}</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '24px' }}>
+        <button onClick={goToPrevMonth} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: '16px', height: '16px' }}>{Icons.chevronLeft}</span>
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: '18px', color: 'var(--text)', minWidth: '160px', textAlign: 'center' }}>{monthName}</span>
           {!isCurrentMonth && (
-            <button
-              onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()) }}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              Today
-            </button>
+            <button onClick={() => { setSelectedMonth(now.getMonth()); setSelectedYear(now.getFullYear()) }} style={{ fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none', cursor: 'pointer' }}>Today</button>
           )}
         </div>
-        <button onClick={goToNextMonth} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition">→</button>
+        <button onClick={goToNextMonth} style={{ width: '32px', height: '32px', borderRadius: '8px', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ width: '16px', height: '16px' }}>{Icons.chevronRight}</span>
+        </button>
       </div>
 
       {/* Overall summary */}
       {budgetedCategories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-          <div className="flex justify-between items-center mb-3">
-            <p className="text-sm font-medium text-gray-700">Total budget</p>
-            <p className="text-sm text-gray-500">
-              {formatBase(totalActual)} / {formatBase(totalBudgeted)}
-            </p>
+        <div style={{ ...card, padding: '20px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)' }}>Total budget</p>
+            <p style={{ fontSize: '13.5px', color: 'var(--text-muted)' }}>{formatBase(totalActual)} / {formatBase(totalBudgeted)}</p>
           </div>
-          <div className="w-full bg-gray-100 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full transition-all ${
-                totalActual > totalBudgeted ? 'bg-red-500' : 'bg-blue-500'
-              }`}
-              style={{ width: `${Math.min((totalActual / totalBudgeted) * 100, 100)}%` }}
-            />
+          <div style={{ width: '100%', height: '6px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: '3px', background: totalActual > totalBudgeted ? 'var(--red)' : 'var(--primary)', width: `${Math.min((totalActual / totalBudgeted) * 100, 100)}%`, transition: 'width 0.3s' }} />
           </div>
-          <p className="text-xs text-gray-400 mt-2">
-            {totalActual > totalBudgeted
-              ? `${formatBase(totalActual - totalBudgeted)} over budget`
-              : `${formatBase(totalBudgeted - totalActual)} remaining`
-            }
+          <p style={{ fontSize: '12px', color: totalActual > totalBudgeted ? 'var(--red)' : 'var(--text-subtle)', marginTop: '8px' }}>
+            {totalActual > totalBudgeted ? `${formatBase(totalActual - totalBudgeted)} over budget` : `${formatBase(totalBudgeted - totalActual)} remaining`}
           </p>
         </div>
       )}
 
       {/* Budgeted categories */}
       {budgetedCategories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-700">Category Budgets</h2>
+        <div style={{ ...card, marginBottom: '20px' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: '16px', color: 'var(--text)' }}>Category Budgets</span>
           </div>
-          <ul className="divide-y divide-gray-50 px-5">
-            {budgetedCategories.map(cat => {
+          <ul>
+            {budgetedCategories.map((cat, i) => {
               const budget = getEffectiveBudget(cat.id)
               const actual = getActual(cat.id)
               const budgeted = Number(budget.amount_base)
@@ -284,42 +172,32 @@ function Budgets({ household }) {
               const isOverride = budget.month !== null
 
               return (
-                <li key={cat.id} className="py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span>{cat.icon}</span>
-                      <span className="text-sm font-medium text-gray-800">{cat.name}</span>
-                      {isOverride && (
-                        <span className="text-xs bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">
-                          Override
-                        </span>
-                      )}
+                <li key={cat.id} style={{ padding: '16px 20px', borderBottom: i < budgetedCategories.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px' }}>
+                        {cat.icon}
+                      </div>
+                      <span style={{ fontSize: '14px', fontWeight: '500', color: 'var(--text)' }}>{cat.name}</span>
+                      {isOverride && <span style={{ fontSize: '11px', background: 'var(--amber-light)', color: 'var(--amber)', padding: '2px 7px', borderRadius: '4px', fontWeight: '500' }}>Override</span>}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${isOver ? 'text-red-500' : 'text-gray-700'}`}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontFamily: 'DM Serif Display, serif', fontSize: '15px', color: isOver ? 'var(--red)' : 'var(--text)' }}>
                         {formatBase(actual)} / {formatBase(budgeted)}
                       </span>
-                      <button
-                        onClick={() => handleEdit(budget)}
-                        className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-600 hover:bg-blue-100 transition"
-                      >
-                        Edit
+                      <button onClick={() => handleEdit(budget)}
+                        style={{ width: '28px', height: '28px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--primary-light)', color: 'var(--primary)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <span style={{ width: '13px', height: '13px' }}>{Icons.edit}</span>
                       </button>
                     </div>
                   </div>
-                  <div className="w-full bg-gray-100 rounded-full h-1.5">
-                    <div
-                      className={`h-1.5 rounded-full transition-all ${isOver ? 'bg-red-500' : 'bg-blue-500'}`}
-                      style={{ width: `${percent}%` }}
-                    />
+                  <div style={{ width: '100%', height: '5px', background: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', borderRadius: '3px', background: isOver ? 'var(--red)' : 'var(--primary)', width: `${percent}%`, transition: 'width 0.3s' }} />
                   </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-xs text-gray-400">{Math.round(percent)}% used</span>
-                    <span className={`text-xs ${isOver ? 'text-red-500' : 'text-gray-400'}`}>
-                      {isOver
-                        ? `${formatBase(actual - budgeted)} over`
-                        : `${formatBase(budgeted - actual)} left`
-                      }
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-subtle)' }}>{Math.round(percent)}% used</span>
+                    <span style={{ fontSize: '11px', color: isOver ? 'var(--red)' : 'var(--text-muted)' }}>
+                      {isOver ? `${formatBase(actual - budgeted)} over` : `${formatBase(budgeted - actual)} left`}
                     </span>
                   </div>
                 </li>
@@ -329,23 +207,23 @@ function Budgets({ household }) {
         </div>
       )}
 
-      {/* Unbudgeted categories */}
+      {/* Unbudgeted */}
       {unbudgetedCategories.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-700 text-sm">No budget set</h2>
+        <div style={card}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)' }}>
+            <span style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text-muted)' }}>No budget set</span>
           </div>
-          <ul className="divide-y divide-gray-50 px-5">
-            {unbudgetedCategories.map(cat => (
-              <li key={cat.id} className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-2">
-                  <span>{cat.icon}</span>
-                  <span className="text-sm text-gray-600">{cat.name}</span>
+          <ul>
+            {unbudgetedCategories.map((cat, i) => (
+              <li key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderBottom: i < unbudgetedCategories.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: 'var(--bg)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>
+                    {cat.icon}
+                  </div>
+                  <span style={{ fontSize: '13.5px', color: 'var(--text-muted)' }}>{cat.name}</span>
                 </div>
-                <button
-                  onClick={() => handleAdd(cat.id)}
-                  className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 hover:bg-blue-50 hover:text-blue-600 transition"
-                >
+                <button onClick={() => handleAdd(cat.id)}
+                  style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--bg)', fontSize: '12px', fontWeight: '500', color: 'var(--text-muted)', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                   + Set budget
                 </button>
               </li>
@@ -354,109 +232,64 @@ function Budgets({ household }) {
         </div>
       )}
 
-      {/* Add/Edit modal */}
+      {/* Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 z-40 flex items-center justify-center px-4">
-          <div className="bg-white rounded-xl shadow-lg w-full max-w-md p-6">
-            <h2 className="font-semibold text-gray-800 mb-4">
-              {editingBudget ? 'Edit Budget' : 'Set Budget'}
-            </h2>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)', zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <div style={{ background: 'var(--surface)', borderRadius: '14px', width: '100%', maxWidth: '420px', padding: '24px', boxShadow: 'var(--shadow-md)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '20px', color: 'var(--text)' }}>
+                {editingBudget ? 'Edit Budget' : 'Set Budget'}
+              </h2>
+              <button onClick={() => { setShowForm(false); setError(null) }} style={{ width: '28px', height: '28px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                <span style={{ width: '18px', height: '18px' }}>{Icons.x}</span>
+              </button>
+            </div>
 
-            {error && (
-              <p className="text-sm text-red-500 bg-red-50 px-3 py-2 rounded-lg mb-4">{error}</p>
-            )}
+            {error && <p style={{ fontSize: '13px', color: 'var(--red)', background: 'var(--red-light)', padding: '10px 12px', borderRadius: '8px', marginBottom: '16px' }}>{error}</p>}
 
-            <form onSubmit={handleSave} className="space-y-4">
-              {/* Category */}
+            <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  value={form.category_id}
-                  onChange={(e) => setForm(prev => ({ ...prev, category_id: e.target.value }))}
-                  required
-                  disabled={!!editingBudget}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
-                >
+                <label style={labelStyle}>Category</label>
+                <select value={form.category_id} onChange={(e) => setForm(prev => ({ ...prev, category_id: e.target.value }))} required disabled={!!editingBudget}
+                  style={{ ...inputStyle, background: editingBudget ? 'var(--bg)' : 'var(--surface)', color: editingBudget ? 'var(--text-muted)' : 'var(--text)' }}>
                   <option value="">Select category</option>
-                  {expenseCategories.map(c => (
-                    <option key={c.id} value={c.id}>{c.icon} {c.name}</option>
-                  ))}
+                  {expenseCategories.map(c => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
                 </select>
               </div>
 
-              {/* Amount */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                    required
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <select
-                    value={form.currency}
-                    onChange={(e) => setForm(prev => ({ ...prev, currency: e.target.value }))}
-                    className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="ILS">₪ ILS</option>
-                    <option value="USD">$ USD</option>
-                    <option value="EUR">€ EUR</option>
+                <label style={labelStyle}>Amount</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <input type="number" placeholder="0.00" min="0" step="0.01" value={form.amount} onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))} required style={{ ...inputStyle, flex: 1 }} onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(22,101,52,0.1)' }} onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }} />
+                  <select value={form.currency} onChange={(e) => setForm(prev => ({ ...prev, currency: e.target.value }))} style={{ ...inputStyle, width: 'auto' }}>
+                    <option value="ILS">₪ ILS</option><option value="USD">$ USD</option><option value="EUR">€ EUR</option>
                   </select>
                 </div>
               </div>
 
               {/* Repeats toggle */}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--border)' }}>
                 <div>
-                  <p className="text-sm font-medium text-gray-700">Repeat every month</p>
-                  <p className="text-xs text-gray-400">
-                    {form.repeats
-                      ? 'Applies to all months unless overridden'
-                      : `Applies to ${monthName} only`
-                    }
-                  </p>
+                  <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)' }}>Repeat every month</p>
+                  <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>{form.repeats ? 'Applies to all months unless overridden' : `Applies to ${monthName} only`}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setForm(prev => ({ ...prev, repeats: !prev.repeats }))}
-                  className={`relative inline-flex w-11 h-6 rounded-full transition-colors flex-shrink-0 ${
-                    form.repeats ? 'bg-blue-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span className={`inline-block w-5 h-5 bg-white rounded-full shadow transform transition-transform mt-0.5 ${
-                    form.repeats ? 'translate-x-5' : 'translate-x-0.5'
-                  }`} />
+                <button type="button" onClick={() => setForm(prev => ({ ...prev, repeats: !prev.repeats }))}
+                  style={{ width: '44px', height: '24px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: form.repeats ? 'var(--primary)' : 'var(--border)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                  <span style={{ position: 'absolute', top: '2px', left: form.repeats ? '22px' : '2px', width: '20px', height: '20px', borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                 </button>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium py-2.5 rounded-lg transition"
-                >
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button type="submit" disabled={saving} style={{ flex: 1, background: saving ? 'var(--text-muted)' : 'var(--primary)', color: 'white', border: 'none', padding: '11px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: saving ? 'not-allowed' : 'pointer' }}>
                   {saving ? 'Saving...' : editingBudget ? 'Save Changes' : 'Set Budget'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowForm(false); setError(null) }}
-                  className="flex-1 border border-gray-200 text-gray-500 hover:bg-gray-50 font-medium py-2.5 rounded-lg transition"
-                >
+                <button type="button" onClick={() => { setShowForm(false); setError(null) }} style={{ flex: 1, background: 'none', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '11px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                   Cancel
                 </button>
               </div>
 
               {editingBudget && (
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="w-full border border-red-200 text-red-500 hover:bg-red-50 font-medium py-2.5 rounded-lg transition"
-                >
+                <button type="button" onClick={handleDelete} style={{ background: 'none', border: '1px solid #fca5a5', color: 'var(--red)', padding: '11px', borderRadius: '8px', fontSize: '14px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
                   Delete Budget
                 </button>
               )}

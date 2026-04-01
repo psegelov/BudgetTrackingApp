@@ -19,7 +19,6 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
 
   const isOwner = members.find(m => m.user_id === session.user.id)?.role === 'owner'
 
-  // Reset form when household changes
   useEffect(() => {
     setHouseholdName(household?.name || '')
     setHouseholdCurrency(household?.currency || 'ILS')
@@ -28,150 +27,68 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
     setMembers([])
   }, [household?.id])
 
-  useEffect(() => {
-    fetchData()
-  }, [household.id, session.user.id])
+  useEffect(() => { fetchData() }, [household.id, session.user.id])
 
   const fetchData = async () => {
-    const { data: memberData } = await supabase
-      .from('household_members')
-      .select('id, role, joined_at, user_id')
-      .eq('household_id', household.id)
-
+    const { data: memberData } = await supabase.from('household_members').select('id, role, joined_at, user_id').eq('household_id', household.id)
     if (memberData) {
       const userIds = memberData.map(m => m.user_id)
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', userIds)
-
-      const membersWithProfiles = memberData.map(m => ({
-        ...m,
-        profiles: profileData?.find(p => p.id === m.user_id) || null
-      }))
-
-      setMembers(membersWithProfiles)
+      const { data: profileData } = await supabase.from('profiles').select('id, full_name').in('id', userIds)
+      setMembers(memberData.map(m => ({ ...m, profiles: profileData?.find(p => p.id === m.user_id) || null })))
     }
-
-    const { data: inviteData } = await supabase
-      .from('household_invites')
-      .select('id, invite_token, email, created_at, expires_at')
-      .eq('household_id', household.id)
-      .eq('status', 'pending')
-      .gt('expires_at', new Date().toISOString())
-
+    const { data: inviteData } = await supabase.from('household_invites').select('id, invite_token, email, created_at, expires_at').eq('household_id', household.id).eq('status', 'pending').gt('expires_at', new Date().toISOString())
     if (inviteData) setPendingInvites(inviteData)
   }
 
   const handleSaveHousehold = async (e) => {
     e.preventDefault()
     setSavingHousehold(true)
-
-    const { error: updateError } = await supabase
-      .from('households')
-      .update({ name: householdName, currency: householdCurrency })
-      .eq('id', household.id)
-
-    if (updateError) {
-      toast.error(updateError.message)
-    } else {
+    const { error } = await supabase.from('households').update({ name: householdName, currency: householdCurrency }).eq('id', household.id)
+    if (error) { toast.error(error.message) } else {
       const updated = { ...household, name: householdName, currency: householdCurrency }
       setHousehold(updated)
-      if (setHouseholds) {
-        setHouseholds(prev => prev.map(h => h.id === household.id ? updated : h))
-      }
+      if (setHouseholds) setHouseholds(prev => prev.map(h => h.id === household.id ? updated : h))
       toast.success('Household updated.')
     }
-
     setSavingHousehold(false)
   }
 
   const handleSaveProfile = async (e) => {
     e.preventDefault()
     setSavingProfile(true)
-
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .upsert({ id: session.user.id, full_name: fullName })
-
-    if (updateError) {
-      toast.error(updateError.message)
-    } else {
-      setProfile({ ...profile, full_name: fullName })
-      toast.success('Profile saved.')
-    }
-
+    const { error } = await supabase.from('profiles').upsert({ id: session.user.id, full_name: fullName })
+    if (error) { toast.error(error.message) } else { setProfile({ ...profile, full_name: fullName }); toast.success('Profile saved.') }
     setSavingProfile(false)
   }
 
   const handleGenerateInvite = async () => {
     setGeneratingInvite(true)
-
     const existing = pendingInvites[0]
-    if (existing) {
-      setInviteLink(`${window.location.origin}/join/${existing.invite_token}`)
-      setGeneratingInvite(false)
-      return
-    }
-
-    const { data: invite, error: inviteError } = await supabase
-      .from('household_invites')
-      .insert({ household_id: household.id, invited_by: session.user.id })
-      .select()
-      .single()
-
-    if (inviteError) {
-      toast.error(inviteError.message)
-    } else {
-      setInviteLink(`${window.location.origin}/join/${invite.invite_token}`)
-      await fetchData()
-    }
-
+    if (existing) { setInviteLink(`${window.location.origin}/join/${existing.invite_token}`); setGeneratingInvite(false); return }
+    const { data: invite, error } = await supabase.from('household_invites').insert({ household_id: household.id, invited_by: session.user.id }).select().single()
+    if (error) { toast.error(error.message) } else { setInviteLink(`${window.location.origin}/join/${invite.invite_token}`); await fetchData() }
     setGeneratingInvite(false)
   }
 
   const handleCancelInvite = async (inviteId) => {
-    await supabase
-      .from('household_invites')
-      .update({ status: 'expired' })
-      .eq('id', inviteId)
-
+    await supabase.from('household_invites').update({ status: 'expired' }).eq('id', inviteId)
     setInviteLink(null)
     await fetchData()
     toast.success('Invite cancelled.')
   }
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(inviteLink)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  const handleCopy = () => { navigator.clipboard.writeText(inviteLink); setCopied(true); setTimeout(() => setCopied(false), 2000) }
 
   const handleRemoveMember = async (memberId, memberUserId) => {
-    if (memberUserId === session.user.id) {
-      toast.error("You can't remove yourself.")
-      return
-    }
+    if (memberUserId === session.user.id) { toast.error("You can't remove yourself."); return }
     if (!window.confirm('Remove this member from the household?')) return
-
-    const { error: removeError } = await supabase
-      .from('household_members')
-      .delete()
-      .eq('id', memberId)
-
-    if (removeError) {
-      toast.error(removeError.message)
-    } else {
-      await fetchData()
-      toast.success('Member removed.')
-    }
+    const { error } = await supabase.from('household_members').delete().eq('id', memberId)
+    if (error) { toast.error(error.message) } else { await fetchData(); toast.success('Member removed.') }
   }
 
   const handleDeleteHousehold = async () => {
     if (!window.confirm(`Are you sure you want to delete "${household.name}"? All data will be permanently deleted.`)) return
-
     const id = household.id
-
     await supabase.from('budgets').delete().eq('household_id', id)
     await supabase.from('recurring_templates').delete().eq('household_id', id)
     await supabase.from('transactions').delete().eq('household_id', id)
@@ -179,122 +96,93 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
     await supabase.from('household_invites').delete().eq('household_id', id)
     await supabase.from('household_members').delete().eq('household_id', id)
     await supabase.from('households').delete().eq('id', id)
-
     const remaining = (households || []).filter(h => h.id !== id)
     if (setHouseholds) setHouseholds(remaining)
-
-    if (remaining.length > 0) {
-      switchHousehold(remaining[0])
-      navigate('/dashboard')
-      toast.success('Household deleted.')
-    } else {
-      localStorage.removeItem('activeHouseholdId')
-      window.location.href = '/setup'
-    }
+    if (remaining.length > 0) { switchHousehold(remaining[0]); navigate('/dashboard'); toast.success('Household deleted.') }
+    else { localStorage.removeItem('activeHouseholdId'); window.location.href = '/setup' }
   }
 
+  const inputStyle = { width: '100%', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '14px', fontFamily: 'DM Sans, sans-serif', color: 'var(--text)', background: 'var(--surface)', outline: 'none', boxSizing: 'border-box' }
+  const labelStyle = { display: 'block', fontSize: '13px', fontWeight: '500', color: 'var(--text)', marginBottom: '6px' }
+  const card = { background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '12px', boxShadow: 'var(--shadow)', padding: '24px' }
+  const sectionTitle = { fontFamily: 'DM Serif Display, serif', fontSize: '18px', color: 'var(--text)', marginBottom: '20px' }
+  const primaryBtn = { background: 'var(--primary)', color: 'white', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }
+
   return (
-    <div className="max-w-lg mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-800">Settings</h1>
+    <div style={{ maxWidth: '560px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <h1 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '26px', color: 'var(--text)', letterSpacing: '-0.5px' }}>Settings</h1>
 
       {/* Profile */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-700 mb-4">Your Profile</h2>
-        <form onSubmit={handleSaveProfile} className="space-y-4">
+      <div style={card}>
+        <h2 style={sectionTitle}>Your Profile</h2>
+        <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="text"
-              value={session.user.email}
-              disabled
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-gray-50 text-gray-400"
-            />
+            <label style={labelStyle}>Email</label>
+            <input type="text" value={session.user.email} disabled style={{ ...inputStyle, background: 'var(--bg)', color: 'var(--text-muted)' }} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Full name</label>
-            <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label style={labelStyle}>Full name</label>
+            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} style={inputStyle}
+              onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(22,101,52,0.1)' }}
+              onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }} />
           </div>
-          <button
-            type="submit"
-            disabled={savingProfile}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
-            {savingProfile ? 'Saving...' : 'Save Profile'}
-          </button>
+          <div>
+            <button type="submit" disabled={savingProfile} style={{ ...primaryBtn, opacity: savingProfile ? 0.6 : 1 }}>
+              {savingProfile ? 'Saving...' : 'Save Profile'}
+            </button>
+          </div>
         </form>
       </div>
 
       {/* Household */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-700 mb-4">Household</h2>
-        <form onSubmit={handleSaveHousehold} className="space-y-4">
+      <div style={card}>
+        <h2 style={sectionTitle}>Household</h2>
+        <form onSubmit={handleSaveHousehold} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Household name</label>
-            <input
-              type="text"
-              value={householdName}
-              onChange={(e) => setHouseholdName(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            <label style={labelStyle}>Household name</label>
+            <input type="text" value={householdName} onChange={(e) => setHouseholdName(e.target.value)} style={inputStyle}
+              onFocus={e => { e.target.style.borderColor = 'var(--primary)'; e.target.style.boxShadow = '0 0 0 3px rgba(22,101,52,0.1)' }}
+              onBlur={e => { e.target.style.borderColor = 'var(--border)'; e.target.style.boxShadow = 'none' }} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Base currency</label>
-            <select
-              value={householdCurrency}
-              onChange={(e) => setHouseholdCurrency(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
+            <label style={labelStyle}>Base currency</label>
+            <select value={householdCurrency} onChange={(e) => setHouseholdCurrency(e.target.value)} style={inputStyle}>
               <option value="ILS">₪ ILS — Israeli Shekel</option>
               <option value="USD">$ USD — US Dollar</option>
               <option value="EUR">€ EUR — Euro</option>
             </select>
-            <p className="text-xs text-gray-400 mt-1">All totals and charts display in this currency.</p>
+            <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>All totals and charts display in this currency.</p>
           </div>
-          <button
-            type="submit"
-            disabled={savingHousehold}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
-            {savingHousehold ? 'Saving...' : 'Save'}
-          </button>
+          <div>
+            <button type="submit" disabled={savingHousehold} style={{ ...primaryBtn, opacity: savingHousehold ? 0.6 : 1 }}>
+              {savingHousehold ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </form>
       </div>
 
       {/* Members */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <h2 className="font-semibold text-gray-700 mb-4">Members</h2>
-        <ul className="divide-y divide-gray-50 mb-4">
-          {members.map(m => (
-            <li key={m.id} className="flex items-center justify-between py-3">
+      <div style={card}>
+        <h2 style={sectionTitle}>Members</h2>
+        <ul style={{ marginBottom: '20px' }}>
+          {members.map((m, i) => (
+            <li key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: i < members.length - 1 ? '1px solid var(--border)' : 'none' }}>
               <div>
-                <p className="text-sm font-medium text-gray-800">
+                <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)' }}>
                   {m.profiles?.full_name || 'Unknown'}
-                  {m.user_id === session.user.id && (
-                    <span className="text-xs text-gray-400 ml-1">(you)</span>
-                  )}
+                  {m.user_id === session.user.id && <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '6px' }}>(you)</span>}
                 </p>
-                <p className="text-xs text-gray-400">
-                  {m.role} · joined {new Date(m.joined_at).toLocaleDateString('en-GB', {
-                    day: 'numeric', month: 'short', year: 'numeric'
-                  })}
+                <p style={{ fontSize: '12px', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                  Joined {new Date(m.joined_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  m.role === 'owner' ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500'
-                }`}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '5px', fontWeight: '500', background: m.role === 'owner' ? 'var(--primary-light)' : 'var(--bg)', color: m.role === 'owner' ? 'var(--primary)' : 'var(--text-muted)', border: `1px solid ${m.role === 'owner' ? 'var(--border)' : 'var(--border)'}` }}>
                   {m.role}
                 </span>
                 {isOwner && m.user_id !== session.user.id && (
-                  <button
-                    onClick={() => handleRemoveMember(m.id, m.user_id)}
-                    className="text-xs px-2 py-1 rounded-full border border-red-200 text-red-500 hover:bg-red-50 transition"
-                  >
+                  <button onClick={() => handleRemoveMember(m.id, m.user_id)}
+                    style={{ fontSize: '12px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #fca5a5', background: 'none', color: 'var(--red)', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif' }}>
                     Remove
                   </button>
                 )}
@@ -305,25 +193,20 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
 
         {/* Pending invites */}
         {pendingInvites.length > 0 && (
-          <div className="mb-4">
-            <p className="text-sm font-medium text-gray-700 mb-2">Pending invites</p>
-            <ul className="space-y-2">
+          <div style={{ marginBottom: '20px' }}>
+            <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text)', marginBottom: '10px' }}>Pending invites</p>
+            <ul style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {pendingInvites.map(invite => (
-                <li key={invite.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <li key={invite.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--bg)', borderRadius: '8px', padding: '10px 12px', border: '1px solid var(--border)' }}>
                   <div>
-                    <p className="text-xs text-gray-600 font-mono truncate max-w-[200px]">
+                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '220px' }}>
                       {`${window.location.origin}/join/${invite.invite_token}`}
                     </p>
-                    <p className="text-xs text-gray-400">
-                      Expires {new Date(invite.expires_at).toLocaleDateString('en-GB', {
-                        day: 'numeric', month: 'short'
-                      })}
+                    <p style={{ fontSize: '11px', color: 'var(--text-subtle)', marginTop: '2px' }}>
+                      Expires {new Date(invite.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleCancelInvite(invite.id)}
-                    className="text-xs text-red-500 hover:underline ml-2"
-                  >
+                  <button onClick={() => handleCancelInvite(invite.id)} style={{ fontSize: '12px', color: 'var(--red)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', marginLeft: '8px' }}>
                     Cancel
                   </button>
                 </li>
@@ -333,36 +216,20 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
         )}
 
         {/* Invite */}
-        <div className="border-t border-gray-100 pt-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">Invite someone</p>
-          <p className="text-xs text-gray-400 mb-3">
-            Generate a link and share it — anyone with the link can join your household.
-          </p>
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
+          <p style={{ fontSize: '13.5px', fontWeight: '500', color: 'var(--text)', marginBottom: '6px' }}>Invite someone</p>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>Generate a link and share it — anyone with the link can join this household.</p>
           {!inviteLink ? (
-            <button
-              onClick={handleGenerateInvite}
-              disabled={generatingInvite}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-            >
+            <button onClick={handleGenerateInvite} disabled={generatingInvite} style={{ ...primaryBtn, opacity: generatingInvite ? 0.6 : 1 }}>
               {generatingInvite ? 'Generating...' : 'Generate invite link'}
             </button>
           ) : (
-            <div className="space-y-2">
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={inviteLink}
-                  readOnly
-                  className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-xs bg-gray-50 text-gray-600"
-                />
-                <button
-                  onClick={handleCopy}
-                  className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition"
-                >
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input type="text" value={inviteLink} readOnly style={{ ...inputStyle, flex: 1, background: 'var(--bg)', fontSize: '12px', color: 'var(--text-muted)' }} />
+                <button onClick={handleCopy} style={primaryBtn}>{copied ? '✓ Copied' : 'Copy'}</button>
               </div>
-              <p className="text-xs text-gray-400">Link expires in 7 days.</p>
+              <p style={{ fontSize: '12px', color: 'var(--text-subtle)' }}>Link expires in 7 days.</p>
             </div>
           )}
         </div>
@@ -370,15 +237,13 @@ function Settings({ session, household, setHousehold, profile, setProfile, house
 
       {/* Danger zone */}
       {isOwner && (
-        <div className="bg-white rounded-xl shadow-sm border border-red-100 p-6">
-          <h2 className="font-semibold text-red-600 mb-1">Danger Zone</h2>
-          <p className="text-xs text-gray-400 mb-4">
+        <div style={{ background: 'var(--surface)', border: '1px solid #fca5a5', borderRadius: '12px', padding: '24px', boxShadow: 'var(--shadow)' }}>
+          <h2 style={{ fontFamily: 'DM Serif Display, serif', fontSize: '18px', color: 'var(--red)', marginBottom: '8px' }}>Danger Zone</h2>
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '16px' }}>
             Deleting this household will permanently remove all transactions, categories, budgets and recurring templates. This cannot be undone.
           </p>
-          <button
-            onClick={handleDeleteHousehold}
-            className="border border-red-200 text-red-500 hover:bg-red-50 text-sm font-medium px-4 py-2 rounded-lg transition"
-          >
+          <button onClick={handleDeleteHousehold}
+            style={{ border: '1px solid #fca5a5', background: 'none', color: 'var(--red)', padding: '9px 18px', borderRadius: '8px', fontSize: '13.5px', fontWeight: '500', fontFamily: 'DM Sans, sans-serif', cursor: 'pointer' }}>
             Delete household
           </button>
         </div>
